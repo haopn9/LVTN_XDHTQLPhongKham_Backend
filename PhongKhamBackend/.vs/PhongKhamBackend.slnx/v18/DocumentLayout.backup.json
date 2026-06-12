@@ -3,8 +3,12 @@
   "WorkspaceRootPath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{C2B12ABD-CAB7-40BF-8A3C-046F358D81BF}|PhongKhamBackend\\PhongKhamBackend.csproj|c:\\lvtn\\lvtn_xdhtqlphongkham_backend\\phongkhambackend\\phongkhambackend\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{C2B12ABD-CAB7-40BF-8A3C-046F358D81BF}|PhongKhamBackend\\PhongKhamBackend.csproj|solutionrelative:phongkhambackend\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{14EBB941-8914-826D-6169-EF53AA54F3B6}|PhongKhamBackend\\PhongKhamBackend.csproj|c:\\lvtn\\lvtn_xdhtqlphongkham_backend\\phongkhambackend\\phongkhambackend\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14EBB941-8914-826D-6169-EF53AA54F3B6}|PhongKhamBackend\\PhongKhamBackend.csproj|solutionrelative:phongkhambackend\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -19,6 +23,19 @@
             {
               "$type": "Document",
               "DocumentIndex": 0,
+              "Title": "QuanLyPhongKhamDbContext.cs",
+              "DocumentMoniker": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
+              "RelativeDocumentMoniker": "PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
+              "ToolTip": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
+              "RelativeToolTip": "PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-12T08:14:04.124Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\Program.cs",
               "RelativeDocumentMoniker": "PhongKhamBackend\\Program.cs",

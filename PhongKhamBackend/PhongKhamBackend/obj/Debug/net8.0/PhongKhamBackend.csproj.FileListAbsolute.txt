@@ -145,3 +145,4 @@ C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKhamBackend.pdb
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKhamBackend.genruntimeconfig.cache
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\ref\PhongKhamBackend.dll
+C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKhamBackend.sourcelink.json
