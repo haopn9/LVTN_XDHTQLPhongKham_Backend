@@ -1,0 +1,1214 @@
+================================================================
+        TRÌNH BÀY CHỨC NĂNG - HỆ THỐNG QUẢN LÝ PHÒNG KHÁM
+================================================================
+
+================================================================
+1. ĐĂNG NHẬP
+================================================================
+1.1 Tên API
+    POST api/xacthuc/DangNhap
+
+1.2 Quy trình
+    B1: Người dùng nhập Email và Password trên giao diện đăng nhập
+    B2: Client gửi request lên server
+    B3: Server kiểm tra Email (lưu trong cột Username) tồn tại trong bảng Users
+    B4: Server kiểm tra PasswordHash khớp với mật khẩu được gửi lên
+    B5: Server kiểm tra trạng thái tài khoản (IsActive = 1)
+    B6: Server lấy thông tin Role từ bảng Roles và thông tin nhân viên từ bảng NhanVien
+    B7: Server tạo token (JWT) và trả về client
+    B8: Client lưu token và điều hướng trang tương ứng theo Role
+
+    * Ghi chú: Tài khoản được Admin tạo sẵn khi thêm thông tin nhân sự (email
+      nhân viên được dùng làm Username đăng nhập). Hệ thống không thực hiện
+      xác minh email qua OTP vì đây là mô hình admin-provisioned (admin cấp
+      tài khoản), không phải self-registration (người dùng tự đăng ký).
+1.3 Input
+    - Email          <string> - Email đăng nhập (lưu trong cột Username của bảng Users)
+    - Password       <string> - Mật khẩu
+
+1.4 Output (khi thành công)
+    - message        <string>  : "Đăng nhập thành công"
+    - token          <string>  : JWT token dùng cho các request tiếp theo
+    - userID         <int>     : ID người dùng (từ bảng Users)
+    - roleID         <int>     : ID role (từ bảng Roles)
+    - roleName       <string>  : Tên role (Admin / BacSi / LeTan / ThuNgan / QuanLyKho)
+    - hoTen          <string>  : Họ tên nhân viên (từ bảng NhanVien)
+    - maNV           <string>  : Mã nhân viên (từ bảng NhanVien)
+    * Client tự xử lý điều hướng trang dựa vào roleName trả về
+
+1.5 Ràng buộc
+    - Không để trống Email hoặc Password
+    - Email phải đúng định dạng (vd: example@gmail.com)
+    - Tài khoản phải tồn tại trong hệ thống (bảng Users, cột Username = Email)
+    - Tài khoản phải đang hoạt động (IsActive = 1)
+    - Giới hạn số lần đăng nhập sai: tối đa 5 lần liên tiếp
+      → Sau 5 lần sai: khóa tạm thời 5 phút
+
+1.6 Xử lý lỗi
+    1.6.1 Người dùng để trống Email hoặc Password
+          → Thông báo: "Người dùng bắt buộc nhập đủ email & mật khẩu để đăng nhập tài khoản"
+
+    1.6.2 Người dùng nhập sai Email hoặc Password
+          → Thông báo: "Email hoặc mật khẩu không chính xác"
+          (Không phân biệt sai Email hay sai Password để tránh lộ thông tin)
+
+    1.6.3 Tài khoản bị vô hiệu hóa (IsActive = 0)
+          → Thông báo: "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên"
+
+    1.6.4 Tài khoản bị khóa tạm thời do nhập sai quá số lần cho phép
+          → Thông báo: "Tài khoản tạm thời bị khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 5 phút"
+
+    1.6.5 Hệ thống không kết nối được API hoặc Database
+          → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+2. ĐĂNG XUẤT
+================================================================
+2.1 Tên API
+    POST api/xacthuc/DangXuat
+
+2.2 Quy trình
+    B1: Người dùng click "Đăng xuất"
+    B2: Client gửi request kèm token hiện tại lên server
+    B3: Server xác thực token hợp lệ
+    B4: Server vô hiệu hóa token (đưa vào blacklist hoặc xóa refresh token)
+    B5: Server trả về thành công
+    B6: Client xóa token đang lưu và chuyển về trang đăng nhập
+
+2.3 Input (Header)
+    - Authorization  <string> : "Bearer {token}" - Token JWT của phiên đăng nhập hiện tại
+
+2.4 Output (khi thành công)
+    - message        <string> : "Đăng xuất thành công"
+
+2.5 Ràng buộc
+    - Yêu cầu token hợp lệ trong header Authorization
+    - Sau khi đăng xuất, token cũ không còn giá trị sử dụng
+
+2.6 Xử lý lỗi
+    2.6.1 Token không hợp lệ hoặc đã hết hạn
+          → Vẫn cho phép đăng xuất bình thường, xóa token phía client
+          → Chuyển về trang đăng nhập
+
+    2.6.2 Hệ thống không kết nối được API hoặc Database
+          → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+          → Vẫn cho phép xóa token phía client và chuyển về trang đăng nhập
+
+
+================================================================
+3. ĐỔI MẬT KHẨU
+================================================================
+3.1 Tên API
+    PUT api/nguoidung/DoiMatKhau
+
+3.2 Quy trình
+    B1: Người dùng click "Đổi mật khẩu"
+    B2: Người dùng nhập mật khẩu cũ, mật khẩu mới, nhập lại mật khẩu mới
+    B3: Hệ thống kiểm tra real-time các ràng buộc mật khẩu mới trong khi người dùng nhập
+    B4: Người dùng submit form
+    B5: Client gửi request kèm token lên server
+    B6: Server xác thực token, xác định userID từ token
+    B7: Server kiểm tra mật khẩu cũ có khớp không (so sánh với PasswordHash trong bảng Users)
+    B8: Server kiểm tra mật khẩu mới không trùng mật khẩu cũ
+    B9: Server hash mật khẩu mới và cập nhật vào bảng Users
+    B10: Server vô hiệu hóa token hiện tại, yêu cầu đăng nhập lại
+    B11: Client nhận thông báo thành công, chuyển về trang đăng nhập
+
+3.3 Input (Header + Body)
+    Header:
+    - Authorization  <string> : "Bearer {token}" - Bắt buộc, xác thực người dùng
+      (UserID sẽ được lấy tự động từ token, không cần truyền thủ công)
+
+    Body:
+    - matKhauCu              <string> : Mật khẩu hiện tại
+    - matKhauMoi             <string> : Mật khẩu mới muốn đặt
+    - nhapLaiMatKhauMoi      <string> : Nhập lại mật khẩu mới để xác nhận
+
+3.4 Output (khi thành công)
+    - message        <string> : "Cập nhật mật khẩu mới thành công. Vui lòng đăng nhập lại"
+
+3.5 Ràng buộc
+    3.5.1 Không để trống bất kỳ trường nào
+
+    3.5.2 Mật khẩu cũ phải chính xác (khớp với PasswordHash trong bảng Users)
+
+    3.5.3 Mật khẩu mới không được trùng với mật khẩu cũ
+
+    3.5.4 Mật khẩu mới phải tuân theo quy tắc (kiểm tra real-time):
+          + Độ dài từ 8 đến 12 ký tự
+          + Có ít nhất 1 chữ thường (a-z)
+          + Có ít nhất 1 chữ hoa (A-Z)
+          + Có ít nhất 1 chữ số (0-9)
+          + Có ít nhất 1 ký tự đặc biệt (!, @, #, $, %, ...)
+          + Không chứa khoảng trắng
+
+    3.5.5 Nhập lại mật khẩu mới phải trùng khớp với mật khẩu mới
+
+    3.5.6 Yêu cầu token hợp lệ trong header (người dùng phải đang đăng nhập)
+
+3.6 Xử lý lỗi
+    3.6.1 Người dùng để trống một hoặc nhiều trường
+          → Thông báo: "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết"
+
+    3.6.2 Người dùng nhập sai mật khẩu cũ
+          → Thông báo: "Mật khẩu cũ không chính xác"
+
+    3.6.3 Mật khẩu mới trùng với mật khẩu cũ
+          → Thông báo: "Mật khẩu mới không được trùng với mật khẩu cũ"
+
+    3.6.4 Mật khẩu mới không đạt quy tắc (kiểm tra real-time từng điều kiện)
+          → Hiển thị trực tiếp các điều kiện chưa đạt bên dưới ô nhập
+
+    3.6.5 Nhập lại mật khẩu mới không khớp với mật khẩu mới
+          → Thông báo: "Nhập lại mật khẩu không khớp"
+
+    3.6.6 Token không hợp lệ hoặc hết hạn
+          → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+          → Chuyển về trang đăng nhập
+
+    3.6.7 Hệ thống không kết nối được API hoặc Database
+          → Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+        THIẾT KẾ API - CRUD NHÂN VIÊN
+        Controller: NguoiDungController.cs
+        Base Route: api/nhan-vien
+        Phân quyền: Chỉ Admin mới được truy cập
+================================================================
+
+
+================================================================
+4. LẤY DANH SÁCH NHÂN VIÊN
+================================================================
+4.1 Tên API
+    GET api/nhan-vien
+
+4.2 Mô tả
+    Lấy danh sách nhân viên có hỗ trợ lọc theo trạng thái, tìm kiếm
+    và phân trang. Mặc định trả về danh sách nhân viên còn hoạt động.
+
+4.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+4.4 Input (Query Parameters)
+    - status    <string>  : Lọc theo trạng thái tài khoản
+                            "active"   → Nhân viên còn hoạt động (IsActive = 1) [Mặc định]
+                            "inactive" → Nhân viên bị tạm khóa  (IsActive = 0)
+    - page      <int>     : Trang hiện tại [Mặc định: 1]
+    - limit     <int>     : Số bản ghi mỗi trang [Mặc định: 20, Tối đa: 100]
+    - search    <string>  : Tìm kiếm theo Họ tên hoặc Mã nhân viên (tuỳ chọn)
+    - roleID    <int>     : Lọc theo vai trò (tuỳ chọn)
+                            1 = Admin | 2 = BacSi | 3 = LeTan | 4 = ThuNgan | 5 = QuanLyKhoThuoc
+
+    Ví dụ gọi API:
+    GET api/nhan-vien                              → DS nhân viên hoạt động, trang 1
+    GET api/nhan-vien?status=inactive              → DS nhân viên tạm khóa
+    GET api/nhan-vien?search=nguyen&roleID=2       → Tìm bác sĩ tên Nguyễn
+    GET api/nhan-vien?status=active&page=2&limit=10
+
+4.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":      <int>     // Số thứ tự (tính theo trang hiện tại)
+                "maNV":     <string>  // Mã nhân viên (từ bảng NhanVien)
+                "hoTen":    <string>  // Họ và tên (từ bảng NhanVien)
+                "username": <string>  // Tên đăng nhập (từ bảng Users)
+                "roleID":   <int>     // ID vai trò (từ bảng Roles)
+                "roleName": <string>  // Tên vai trò: Admin / BacSi / LeTan / ThuNgan / QuanLyKhoThuoc
+                "isActive": <bool>    // Trạng thái: true = Hoạt động | false = Tạm khóa
+            }
+        ],
+        "pagination": {
+            "page":       <int>,  // Trang hiện tại
+            "limit":      <int>,  // Số bản ghi mỗi trang
+            "total":      <int>,  // Tổng số bản ghi thỏa điều kiện lọc
+            "totalPages": <int>   // Tổng số trang
+        },
+        "filter": {
+            "status":  <string>,  // Bộ lọc trạng thái đang áp dụng
+            "search":  <string>,  // Từ khóa tìm kiếm đang áp dụng (nếu có)
+            "roleID":  <int>      // Bộ lọc vai trò đang áp dụng (nếu có)
+        }
+    }
+
+4.6 Xử lý lỗi
+    4.6.1 Token không hợp lệ hoặc hết hạn
+          → HTTP 401 Unauthorized
+          → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    4.6.2 Tài khoản không có quyền Admin
+          → HTTP 403 Forbidden
+          → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    4.6.3 Giá trị status không hợp lệ (không phải "active" hoặc "inactive")
+          → HTTP 400 Bad Request
+          → Thông báo: "Giá trị status không hợp lệ. Chỉ chấp nhận: active | inactive"
+
+    4.6.4 Giá trị page hoặc limit không hợp lệ (số âm, bằng 0, không phải số)
+          → HTTP 400 Bad Request
+          → Thông báo: "Giá trị phân trang không hợp lệ"
+
+    4.6.5 Hệ thống không kết nối được API hoặc Database
+          → HTTP 500 Internal Server Error
+          → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+5. THÊM NHÂN VIÊN
+================================================================
+5.1 Tên API
+    POST api/nhan-vien
+
+5.2 Mô tả
+    Admin tạo tài khoản nhân viên mới vào hệ thống. Hệ thống sẽ đồng
+    thời tạo bản ghi trong cả 2 bảng: Users và NhanVien.
+    Mật khẩu được hash BCrypt trước khi lưu vào database.
+
+5.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+5.4 Input (Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}"
+
+    Body:
+    Thông tin hồ sơ nhân viên (bảng NhanVien):
+    - maNV      <string>  : Mã nhân viên — BẮT BUỘC (VD: NV002, BS001)
+    - hoTen     <string>  : Họ và tên     — BẮT BUỘC
+    - sdt       <string>  : Số điện thoại — BẮT BUỘC
+    - email     <string>  : Địa chỉ email — Tuỳ chọn
+    - chuyenMon <string>  : Chuyên môn    — Tuỳ chọn
+
+    Tài khoản hệ thống & phân quyền (bảng Users + Roles):
+    - username  <string>  : Tên đăng nhập       — BẮT BUỘC
+    - password  <string>  : Mật khẩu (plain text, server sẽ hash BCrypt) — BẮT BUỘC
+                            Nếu Admin chọn mật khẩu mặc định → client tự điền "STUCaoLo"
+    - roleID    <int>     : ID vai trò           — BẮT BUỘC
+                            1 = Admin | 2 = BacSi | 3 = LeTan | 4 = ThuNgan | 5 = QuanLyKhoThuoc
+    - isActive  <bool>    : Trạng thái tài khoản — BẮT BUỘC
+                            true = Hoạt động | false = Tạm khóa
+
+    Ví dụ Request Body:
+    {
+        "maNV":      "BS002",
+        "hoTen":     "Nguyễn Văn An",
+        "sdt":       "0901234567",
+        "email":     "nguyenvanan@pkdk.com",
+        "chuyenMon": "Nội khoa",
+        "username":  "nguyenvanan",
+        "password":  "STUCaoLo",
+        "roleID":    2,
+        "isActive":  true
+    }
+
+5.5 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm nhân viên thành công",
+        "data": {
+            "maNV":     <string>,
+            "hoTen":    <string>,
+            "username": <string>,
+            "roleName": <string>,
+            "isActive": <bool>
+        }
+    }
+
+5.6 Ràng buộc
+    5.6.1 Các trường bắt buộc: maNV, hoTen, sdt, username, password, roleID, isActive
+
+    5.6.2 Mã nhân viên (maNV)
+          - Không được để trống
+          - Không được chứa khoảng trắng
+          - Không được trùng với mã nhân viên đã tồn tại trong bảng NhanVien
+
+    5.6.3 Số điện thoại (sdt)
+          - Phải gồm đúng 10 chữ số
+          - Phải bắt đầu bằng số 0
+          - Không được chứa khoảng trắng
+          - Không được trùng với số điện thoại của nhân viên khác trong bảng NhanVien
+
+    5.6.4 Địa chỉ email (email) — nếu có nhập
+          - Phải đúng định dạng: example@mail.com
+          - Không được chứa khoảng trắng
+          - Không được trùng với email của nhân viên khác trong bảng NhanVien
+
+    5.6.5 Tên đăng nhập (username)
+          - Không được để trống
+          - Không được chứa khoảng trắng
+          - Không được trùng với tên đăng nhập đã tồn tại trong bảng Users
+
+    5.6.6 Mật khẩu (password)
+          - Không được để trống
+          - Không được chứa khoảng trắng
+          - Server hash BCrypt trước khi lưu — TUYỆT ĐỐI không lưu plain text
+
+    5.6.7 Vai trò (roleID)
+          - Phải là một trong các giá trị: 1, 2, 3, 4, 5
+
+5.7 Xử lý lỗi
+    5.7.1 Không nhập mã nhân viên
+          → HTTP 400 | Thông báo: "Vui lòng nhập Mã nhân viên!"
+
+    5.7.2 Không nhập họ tên
+          → HTTP 400 | Thông báo: "Vui lòng nhập Họ tên nhân viên!"
+
+    5.7.3 Không nhập số điện thoại
+          → HTTP 400 | Thông báo: "Vui lòng nhập Số điện thoại!"
+
+    5.7.4 Không nhập tên đăng nhập
+          → HTTP 400 | Thông báo: "Vui lòng nhập Tên đăng nhập tài khoản!"
+
+    5.7.5 Không nhập mật khẩu
+          → HTTP 400 | Thông báo: "Vui lòng nhập Mật khẩu tài khoản!"
+
+    5.7.6 Mã nhân viên chứa khoảng trắng
+          → HTTP 400 | Thông báo: "Mã nhân viên không được chứa khoảng trắng. Vui lòng nhập lại!"
+
+    5.7.7 Mã nhân viên đã tồn tại
+          → HTTP 409 Conflict
+          → Thông báo: "Mã nhân viên đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác!"
+
+    5.7.8 Số điện thoại sai định dạng
+          → HTTP 400 | Thông báo: "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0, không chứa khoảng trắng)!"
+
+    5.7.9 Số điện thoại đã tồn tại
+          → HTTP 409 Conflict
+          → Thông báo: "Số điện thoại này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại số khác!"
+
+    5.7.10 Email sai định dạng
+           → HTTP 400 | Thông báo: "Địa chỉ Email không đúng định dạng (example@mail.com, không chứa khoảng trắng)!"
+
+    5.7.11 Email đã tồn tại
+           → HTTP 409 Conflict
+           → Thông báo: "Địa chỉ Email này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại email khác!"
+
+    5.7.12 Tên đăng nhập chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Tên đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!"
+
+    5.7.13 Tên đăng nhập đã tồn tại
+           → HTTP 409 Conflict
+           → Thông báo: "Tên đăng nhập này đã được sử dụng bởi tài khoản khác. Vui lòng kiểm tra & nhập lại tên đăng nhập khác!"
+
+    5.7.14 Mật khẩu chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mật khẩu đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!"
+
+    5.7.15 roleID không hợp lệ
+           → HTTP 400 | Thông báo: "Vai trò không hợp lệ. Vui lòng chọn lại!"
+
+    5.7.16 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    5.7.17 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    5.7.18 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+6. CẬP NHẬT NHÂN VIÊN
+================================================================
+6.1 Tên API
+    PUT api/nhan-vien/{maNV}
+
+6.2 Mô tả
+    Admin cập nhật thông tin nhân viên. Mã nhân viên (maNV) truyền
+    qua URL và là trường chỉ đọc — không được thay đổi.
+    Nếu admin nhập mật khẩu mới → server hash BCrypt và cập nhật.
+    Nếu admin để trống mật khẩu → giữ nguyên mật khẩu cũ.
+
+6.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+6.4 Input
+    URL Parameter:
+    - maNV      <string>  : Mã nhân viên cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}"
+
+    Body (JSON) — Chỉ truyền các trường cần cập nhật:
+    Thông tin hồ sơ nhân viên (bảng NhanVien):
+    - hoTen     <string>  : Họ và tên     — BẮT BUỘC
+    - sdt       <string>  : Số điện thoại — BẮT BUỘC
+    - email     <string>  : Địa chỉ email — Tuỳ chọn
+    - chuyenMon <string>  : Chuyên môn    — Tuỳ chọn
+
+    Tài khoản hệ thống & phân quyền (bảng Users + Roles):
+    - username  <string>  : Tên đăng nhập       — BẮT BUỘC
+    - password  <string>  : Mật khẩu mới (plain text) — Tuỳ chọn
+                            Để trống → giữ nguyên mật khẩu cũ
+                            Nhập "STUCaoLo" → reset về mật khẩu mặc định
+    - roleID    <int>     : ID vai trò           — BẮT BUỘC
+    - isActive  <bool>    : Trạng thái tài khoản — BẮT BUỘC
+
+    Ví dụ Request:
+    PUT api/nhan-vien/BS002
+    {
+        "hoTen":     "Nguyễn Văn An",
+        "sdt":       "0901234567",
+        "email":     "nguyenvanan@pkdk.com",
+        "chuyenMon": "Tim mạch",
+        "username":  "nguyenvanan",
+        "password":  "",
+        "roleID":    2,
+        "isActive":  false
+    }
+
+6.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật thông tin nhân viên thành công",
+        "data": {
+            "maNV":     <string>,
+            "hoTen":    <string>,
+            "username": <string>,
+            "roleName": <string>,
+            "isActive": <bool>
+        }
+    }
+
+6.6 Ràng buộc
+    6.6.1 Trường chỉ đọc — KHÔNG được thay đổi:
+          - Mã nhân viên (maNV): truyền qua URL để định danh, server
+            bỏ qua nếu client gửi maNV trong body
+
+    6.6.2 Trường được phép cập nhật:
+          - hoTen, sdt, email, chuyenMon, username, password, roleID, isActive
+
+    6.6.3 Nhân viên cần cập nhật phải tồn tại trong hệ thống
+
+    6.6.4 Số điện thoại (sdt)
+          - Phải gồm đúng 10 chữ số, bắt đầu bằng số 0
+          - Không được chứa khoảng trắng
+          - Không được trùng với số điện thoại của nhân viên KHÁC
+            (cho phép giữ nguyên số điện thoại cũ của chính nhân viên đang sửa)
+
+    6.6.5 Địa chỉ email (email) — nếu có nhập
+          - Phải đúng định dạng: example@mail.com
+          - Không được chứa khoảng trắng
+          - Không được trùng với email của nhân viên KHÁC
+            (cho phép giữ nguyên email cũ của chính nhân viên đang sửa)
+
+    6.6.6 Tên đăng nhập (username)
+          - Không được để trống
+          - Không được chứa khoảng trắng
+          - Không được trùng với username của tài khoản KHÁC
+            (cho phép giữ nguyên username cũ của chính nhân viên đang sửa)
+
+    6.6.7 Mật khẩu (password) — nếu có nhập
+          - Không được chứa khoảng trắng
+          - Server hash BCrypt trước khi lưu
+
+    6.6.8 Vai trò (roleID)
+          - Phải là một trong các giá trị: 1, 2, 3, 4, 5
+
+6.7 Xử lý lỗi
+    6.7.1 maNV trên URL không tồn tại trong hệ thống
+          → HTTP 404 Not Found
+          → Thông báo: "Không tìm thấy nhân viên cần cập nhật"
+
+    6.7.2 Không nhập họ tên
+          → HTTP 400 | Thông báo: "Vui lòng nhập Họ tên nhân viên!"
+
+    6.7.3 Không nhập số điện thoại
+          → HTTP 400 | Thông báo: "Vui lòng nhập Số điện thoại!"
+
+    6.7.4 Số điện thoại sai định dạng
+          → HTTP 400 | Thông báo: "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0, không chứa khoảng trắng)!"
+
+    6.7.5 Số điện thoại đã được sử dụng bởi nhân viên khác
+          → HTTP 409 Conflict
+          → Thông báo: "Số điện thoại này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại số khác!"
+
+    6.7.6 Email sai định dạng
+          → HTTP 400 | Thông báo: "Địa chỉ Email không đúng định dạng (example@mail.com, không chứa khoảng trắng)!"
+
+    6.7.7 Email đã được sử dụng bởi nhân viên khác
+          → HTTP 409 Conflict
+          → Thông báo: "Địa chỉ Email này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại email khác!"
+
+    6.7.8 Không nhập tên đăng nhập
+          → HTTP 400 | Thông báo: "Vui lòng nhập Tên đăng nhập tài khoản!"
+
+    6.7.9 Tên đăng nhập chứa khoảng trắng
+          → HTTP 400 | Thông báo: "Tên đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!"
+
+    6.7.10 Tên đăng nhập đã được sử dụng bởi tài khoản khác
+           → HTTP 409 Conflict
+           → Thông báo: "Tên đăng nhập này đã được sử dụng bởi tài khoản khác. Vui lòng kiểm tra & nhập lại tên đăng nhập khác!"
+
+    6.7.11 Mật khẩu chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mật khẩu đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!"
+
+    6.7.12 roleID không hợp lệ
+           → HTTP 400 | Thông báo: "Vai trò không hợp lệ. Vui lòng chọn lại!"
+
+    6.7.13 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    6.7.14 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    6.7.15 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+7. XÓA NHÂN VIÊN
+================================================================
+7.1 Tên API
+    DELETE api/nhan-vien/{maNV}
+
+7.2 Mô tả
+    Admin xóa nhân viên khỏi hệ thống. Áp dụng chiến lược xóa thông
+    minh dựa trên dữ liệu liên quan:
+
+    - Nếu nhân viên CHƯA có dữ liệu liên quan (chưa tiếp đón bệnh nhân,
+      chưa khám bệnh, chưa thu ngân):
+      → Xóa cứng (Hard Delete): xóa khỏi bảng NhanVien và Users
+
+    - Nếu nhân viên ĐÃ có dữ liệu liên quan (đã có PhieuKham, HoaDon...):
+      → KHÔNG xóa cứng (tránh lỗi FK Constraint)
+      → Đề nghị Admin chuyển sang "Tạm khóa" thay thế
+
+7.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+7.4 Input
+    URL Parameter:
+    - maNV  <string> : Mã nhân viên cần xóa — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}"
+
+    Ví dụ Request:
+    DELETE api/nhan-vien/NV005
+
+7.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Kiểm tra maNV tồn tại trong bảng NhanVien
+    B3: Kiểm tra nhân viên có dữ liệu liên quan không:
+        - Bảng PhieuKham: MaNV_TiepDon = maNV hoặc MaBacSi = maNV
+        - Bảng HoaDon:    MaNV_ThuNgan = maNV
+    B4a: Nếu KHÔNG có dữ liệu liên quan
+         → Xóa bản ghi trong bảng NhanVien
+         → Xóa bản ghi trong bảng Users (theo UserID liên kết)
+         → Trả về HTTP 200 thành công
+    B4b: Nếu CÓ dữ liệu liên quan
+         → KHÔNG xóa
+         → Trả về HTTP 409 kèm gợi ý tạm khóa
+
+7.6 Output (khi xóa thành công — Hard Delete) — HTTP 200 OK
+    {
+        "message": "Xóa nhân viên thành công",
+        "deletedMaNV": <string>
+    }
+
+7.7 Output (khi không thể xóa — có dữ liệu liên quan) — HTTP 409 Conflict
+    {
+        "message": "Không thể xóa nhân viên này vì đã có dữ liệu trong hệ thống (phiếu khám, hóa đơn...)",
+        "suggestion": "Bạn có thể tạm khóa tài khoản nhân viên này thay thế. Sử dụng API cập nhật với isActive = false",
+        "suggestedAction": "PUT api/nhan-vien/{maNV}  với  isActive: false"
+    }
+
+7.8 Xử lý lỗi
+    7.8.1 maNV trên URL không tồn tại trong hệ thống
+          → HTTP 404 Not Found
+          → Thông báo: "Không tìm thấy nhân viên cần xóa"
+
+    7.8.2 Admin tự xóa tài khoản của chính mình
+          → HTTP 400 Bad Request
+          → Thông báo: "Không thể xóa tài khoản đang đăng nhập"
+
+    7.8.3 Token không hợp lệ hoặc hết hạn
+          → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    7.8.4 Tài khoản không có quyền Admin
+          → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    7.8.5 Hệ thống không kết nối được API hoặc Database
+          → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+GHI CHÚ CHUNG CHO CONTROLLER
+================================================================
+
+1. ROUTE PREFIX
+   [Route("api/nhan-vien")]
+   [ApiController]
+
+2. PHÂN QUYỀN
+   Tất cả các action trong NguoiDungController đều yêu cầu:
+   [Authorize(Roles = "Admin")]
+
+3. HTTP STATUS CODE QUY CHUẨN
+   200 OK           → Thành công (GET, PUT, DELETE)
+   201 Created      → Tạo mới thành công (POST)
+   400 Bad Request  → Dữ liệu đầu vào không hợp lệ
+   401 Unauthorized → Token không hợp lệ / hết hạn
+   403 Forbidden    → Không có quyền truy cập
+   404 Not Found    → Không tìm thấy tài nguyên
+   409 Conflict     → Dữ liệu bị trùng / xung đột FK
+   500 Server Error → Lỗi server hoặc database
+
+4. LƯU Ý VALIDATE TRÙNG (UNIQUE CHECK) CHO CẬP NHẬT
+   Khi check trùng sdt / email / username ở API Cập nhật,
+   phải loại trừ chính bản ghi đang sửa:
+   WHERE (sdt = @sdt) AND (MaNV != @maNV)
+   Tránh báo lỗi trùng khi Admin giữ nguyên giá trị cũ.
+
+5. MẬT KHẨU
+   - Frontend luôn gửi plain text
+   - Backend dùng BCrypt.HashPassword() trước khi lưu
+   - Tuyệt đối không lưu plain text vào database
+
+================================================================
+================================================================
+     TRÌNH BÀY CHỨC NĂNG - HỆ THỐNG QUẢN LÝ PHÒNG KHÁM
+           PHÂN HỆ: TIẾP ĐÓN & TIẾP NHẬN BỆNH NHÂN
+================================================================
+     Controller : TiepDonController.cs
+     Base Route  : api/tiep-don
+     Phân quyền : Lễ tân (LeTan) & Admin
+================================================================
+
+
+================================================================
+8. TRA CỨU BỆNH NHÂN CŨ THEO SĐT
+================================================================
+8.1 Tên API
+    GET api/tiep-don/tra-cuu?sdt={soDienThoai}
+
+8.2 Mô tả
+    Lễ tân nhập SĐT vào ô tìm kiếm trên màn hình Tiếp đón để kiểm
+    tra xem bệnh nhân đã có hồ sơ trong hệ thống chưa.
+    - Nếu tìm thấy → trả về thông tin để điền nhanh vào form.
+    - Nếu không tìm thấy → bệnh nhân mới, lễ tân nhập thủ công.
+
+8.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Role được phép: LeTan, Admin
+
+8.4 Input (Query Parameter)
+    Header:
+    - Authorization  <string> : "Bearer {token}"
+
+    Query:
+    - sdt   <string> : Số điện thoại cần tra cứu — BẮT BUỘC
+
+    Ví dụ Request:
+    GET api/tiep-don/tra-cuu?sdt=0901234567
+
+8.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền truy cập
+    B2: Kiểm tra sdt không rỗng và đúng định dạng 10 chữ số
+    B3: Tìm kiếm trong bảng BenhNhan theo cột SDT
+    B4: Nếu tìm thấy → trả về thông tin hồ sơ bệnh nhân
+    B5: Nếu không tìm thấy → trả về HTTP 404 để client biết là BN mới
+
+8.6 Output (khi tìm thấy) — HTTP 200 OK
+    {
+        "found": true,
+        "data": {
+            "maBN":       <string>,  // Mã bệnh nhân (từ bảng BenhNhan)
+            "hoTen":      <string>,  // Họ và tên
+            "ngaySinh":   <string>,  // Ngày sinh (định dạng YYYY-MM-DD)
+            "gioiTinh":   <string>,  // "Nam" | "Nữ" | "Khác"
+            "sdt":        <string>,  // Số điện thoại
+            "diaChi":     <string>,  // Địa chỉ thường trú
+            "tienSuBenh": <string>   // Tiền sử bệnh án (có thể null)
+        }
+    }
+
+8.7 Output (khi không tìm thấy) — HTTP 404 Not Found
+    {
+        "found": false,
+        "message": "Không tìm thấy hồ sơ bệnh nhân với số điện thoại này. Vui lòng tạo hồ sơ mới."
+    }
+
+8.8 Xử lý lỗi
+    8.8.1 Tham số sdt bị rỗng hoặc thiếu
+          → HTTP 400 Bad Request
+          → Thông báo: "Vui lòng nhập số điện thoại để tra cứu!"
+
+    8.8.2 Số điện thoại sai định dạng
+          → HTTP 400 Bad Request
+          → Thông báo: "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0)!"
+
+    8.8.3 Token không hợp lệ hoặc hết hạn
+          → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    8.8.4 Tài khoản không có quyền truy cập
+          → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    8.8.5 Hệ thống không kết nối được API hoặc Database
+          → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+9. TIẾP NHẬN BỆNH NHÂN (TẠO PHIẾU KHÁM)
+================================================================
+9.1 Tên API
+    POST api/tiep-don
+
+9.2 Mô tả
+    Lễ tân hoàn tất form tiếp đón và lưu lại để tạo phiếu khám mới.
+    API xử lý hai tình huống:
+
+    Tình huống A — Bệnh nhân CŨ (đã tra cứu thấy maBN):
+      → Chỉ tạo bản ghi mới trong bảng PhieuKham, liên kết với maBN
+        có sẵn. Không tạo lại bản ghi BenhNhan.
+
+    Tình huống B — Bệnh nhân MỚI (chưa có hồ sơ):
+      → Server tạo maBN mới (cấu trúc: BN + yyMMdd + stt 3 chữ số,
+        ví dụ BN260609001) và lưu vào bảng BenhNhan trước.
+      → Sau đó tạo bản ghi PhieuKham liên kết với maBN vừa tạo.
+
+    Trong cả hai tình huống, phiếu khám được tạo với
+    TrangThaiKham = 0 (Chờ khám).
+
+9.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Role được phép: LeTan, Admin
+    - MaNV_TiepDon được lấy tự động từ token (không cần client truyền)
+
+9.4 Input (Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}"
+
+    Body:
+    -- Thông tin bệnh nhân --
+    - maBN        <string>  : Mã BN cũ — Truyền nếu là BN cũ, bỏ trống nếu BN mới
+    - hoTen       <string>  : Họ và tên bệnh nhân (CHỮ HOA) — BẮT BUỘC
+    - ngaySinh    <string>  : Ngày sinh định dạng YYYY-MM-DD  — BẮT BUỘC
+    - gioiTinh    <string>  : "Nam" | "Nữ" | "Khác"          — BẮT BUỘC
+    - sdt         <string>  : Số điện thoại 10 chữ số         — BẮT BUỘC
+    - diaChi      <string>  : Địa chỉ thường trú              — Tuỳ chọn
+    - tienSuBenh  <string>  : Tiền sử bệnh lý                 — Tuỳ chọn
+
+    -- Thông tin phiếu khám --
+    - maBacSi     <string>  : Mã bác sĩ chỉ định (từ bảng NhanVien) — Tuỳ chọn
+                              Bỏ trống → hệ thống để null, phân công sau
+    - lyDoKham    <string>  : Lý do đến khám / triệu chứng    — BẮT BUỘC
+    - maICD       <string>  : Mã bệnh ICD chẩn đoán ban đầu   — Tuỳ chọn
+
+    Ví dụ Request Body (BN mới):
+    {
+        "maBN":       "",
+        "hoTen":      "NGUYỄN THỊ LAN",
+        "ngaySinh":   "1995-06-15",
+        "gioiTinh":   "Nữ",
+        "sdt":        "0912345678",
+        "diaChi":     "456 Lê Lợi, Quận 1, TP. Hồ Chí Minh",
+        "tienSuBenh": "Dị ứng Penicillin",
+        "maBacSi":    "BS002",
+        "lyDoKham":   "Đau đầu, sốt nhẹ 2 ngày",
+        "maICD":      "J06"
+    }
+
+    Ví dụ Request Body (BN cũ):
+    {
+        "maBN":       "BN260001",
+        "hoTen":      "NGUYỄN VĂN AN",
+        "ngaySinh":   "1980-03-15",
+        "gioiTinh":   "Nam",
+        "sdt":        "0901234567",
+        "diaChi":     "123 Nguyễn Trãi, Quận 5, TP. Hồ Chí Minh",
+        "tienSuBenh": "Tăng huyết áp, Đái tháo đường typ 2",
+        "maBacSi":    "BS001",
+        "lyDoKham":   "Tái khám định kỳ, đo huyết áp",
+        "maICD":      "I10"
+    }
+
+9.5 Quy trình xử lý tại server
+    B1: Xác thực token, lấy MaNV_TiepDon từ token
+    B2: Validate các trường bắt buộc (hoTen, ngaySinh, gioiTinh,
+        sdt, lyDoKham)
+    B3: Validate định dạng sdt (10 chữ số, bắt đầu bằng 0)
+    B4: Validate định dạng ngaySinh (YYYY-MM-DD, không là ngày tương lai)
+    B5: Kiểm tra maICD nếu có — phải tồn tại trong bảng DanhMucICD
+    B6: Kiểm tra maBacSi nếu có — phải tồn tại trong NhanVien và
+        có Role = BacSi
+    B7A: Nếu maBN rỗng (BN mới)
+         → Sinh maBN mới: "BN" + yyMMdd + stt (lấy MAX stt trong ngày + 1)
+         → INSERT vào bảng BenhNhan
+    B7B: Nếu maBN không rỗng (BN cũ)
+         → Kiểm tra maBN tồn tại trong bảng BenhNhan
+         → Cập nhật lại thông tin BenhNhan nếu có thay đổi (diaChi, tienSuBenh)
+    B8: Sinh maPhieu mới: "PK_" + yyMMdd + "_" + stt 3 chữ số
+    B9: INSERT vào bảng PhieuKham với TrangThaiKham = 0
+    B10: Trả về HTTP 201 kèm thông tin phiếu khám vừa tạo
+
+9.6 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Tiếp nhận bệnh nhân thành công",
+        "data": {
+            "maPhieu":        <string>,  // Mã phiếu khám vừa tạo (VD: PK_260609_001)
+            "maBN":           <string>,  // Mã bệnh nhân (cũ hoặc mới tạo)
+            "hoTen":          <string>,  // Họ tên bệnh nhân
+            "ngayKham":       <string>,  // Thời gian tiếp nhận (ISO 8601)
+            "tenBacSi":       <string>,  // Tên bác sĩ chỉ định (hoặc null)
+            "trangThaiKham":  <int>,     // 0 = Chờ khám
+            "isNewPatient":   <bool>     // true = vừa tạo hồ sơ mới | false = BN cũ
+        }
+    }
+
+9.7 Ràng buộc
+    9.7.1 Các trường bắt buộc: hoTen, ngaySinh, gioiTinh, sdt, lyDoKham
+
+    9.7.2 Họ tên (hoTen)
+          - Không được để trống
+          - Không chứa ký tự đặc biệt (chỉ chữ cái và khoảng trắng)
+
+    9.7.3 Số điện thoại (sdt)
+          - Phải gồm đúng 10 chữ số, bắt đầu bằng số 0
+          - Không được chứa khoảng trắng
+          * Không unique constraint ở đây — một SĐT có thể có nhiều
+            lần khám (tạo nhiều PhieuKham)
+
+    9.7.4 Ngày sinh (ngaySinh)
+          - Định dạng: YYYY-MM-DD
+          - Không được là ngày trong tương lai
+          - Năm phải từ 1900 trở lên
+
+    9.7.5 Giới tính (gioiTinh)
+          - Chỉ chấp nhận: "Nam", "Nữ", "Khác"
+
+    9.7.6 Mã ICD (maICD) — nếu có
+          - Phải tồn tại trong bảng DanhMucICD
+          - Không bắt buộc; bỏ trống → lưu null
+
+    9.7.7 Bác sĩ chỉ định (maBacSi) — nếu có
+          - Phải tồn tại trong bảng NhanVien
+          - Phải có Role = BacSi (RoleID = 2)
+          - Không bắt buộc; bỏ trống → lưu null
+
+    9.7.8 Mã nhân viên tiếp đón (MaNV_TiepDon)
+          - Lấy tự động từ token — client không cần truyền
+
+9.8 Xử lý lỗi
+    9.8.1 Không nhập họ tên
+          → HTTP 400 | Thông báo: "Vui lòng nhập Họ và tên bệnh nhân!"
+
+    9.8.2 Không nhập số điện thoại
+          → HTTP 400 | Thông báo: "Vui lòng nhập Số điện thoại!"
+
+    9.8.3 Số điện thoại sai định dạng
+          → HTTP 400 | Thông báo: "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0, không chứa khoảng trắng)!"
+
+    9.8.4 Không nhập ngày sinh
+          → HTTP 400 | Thông báo: "Vui lòng nhập Ngày tháng năm sinh!"
+
+    9.8.5 Ngày sinh sai định dạng hoặc không hợp lệ
+          → HTTP 400 | Thông báo: "Ngày sinh không hợp lệ. Vui lòng nhập đúng định dạng YYYY-MM-DD!"
+
+    9.8.6 Ngày sinh là ngày trong tương lai
+          → HTTP 400 | Thông báo: "Ngày sinh không thể là ngày trong tương lai!"
+
+    9.8.7 Không nhập lý do khám
+          → HTTP 400 | Thông báo: "Vui lòng nhập Lý do đến khám!"
+
+    9.8.8 Giới tính không hợp lệ
+          → HTTP 400 | Thông báo: "Giới tính không hợp lệ. Chỉ chấp nhận: Nam, Nữ, Khác!"
+
+    9.8.9 maBN truyền lên nhưng không tồn tại trong hệ thống
+          → HTTP 404 Not Found
+          → Thông báo: "Không tìm thấy hồ sơ bệnh nhân với mã BN đã cung cấp!"
+
+    9.8.10 maICD không tồn tại trong danh mục
+           → HTTP 400 | Thông báo: "Mã bệnh ICD không tồn tại trong danh mục. Vui lòng kiểm tra lại!"
+
+    9.8.11 maBacSi không tồn tại hoặc không phải bác sĩ
+           → HTTP 400 | Thông báo: "Bác sĩ chỉ định không hợp lệ hoặc không tồn tại trong hệ thống!"
+
+    9.8.12 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    9.8.13 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    9.8.14 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+10. LẤY DANH SÁCH BỆNH NHÂN ĐÃ TIẾP ĐÓN
+================================================================
+10.1 Tên API
+     GET api/tiep-don/danh-sach
+
+10.2 Mô tả
+     Trả về danh sách các phiếu khám trong ngày (hoặc theo bộ lọc)
+     kèm thông tin tóm tắt bệnh nhân. Hỗ trợ tìm kiếm theo họ tên,
+     SĐT, mã BN; lọc theo bác sĩ chỉ định, trạng thái khám và phân
+     trang. Mặc định trả về tất cả phiếu khám trong ngày hiện tại.
+
+10.3 Phân quyền
+     - Yêu cầu token hợp lệ trong Header Authorization
+     - Role được phép: LeTan, BacSi, Admin
+
+10.4 Input (Query Parameters)
+     Header:
+     - Authorization  <string> : "Bearer {token}"
+
+     Query:
+     - search      <string>  : Tìm kiếm theo họ tên, SĐT hoặc mã BN
+                               (tuỳ chọn)
+     - maBacSi     <string>  : Lọc theo mã bác sĩ chỉ định (tuỳ chọn)
+     - trangThai   <int>     : Lọc theo trạng thái khám (tuỳ chọn)
+                               0 = Chờ khám | 1 = Đang khám
+                               2 = Chờ CLS  | 3 = Hoàn thành
+     - ngayKham    <string>  : Lọc theo ngày (YYYY-MM-DD)
+                               Mặc định: ngày hiện tại
+     - page        <int>     : Trang hiện tại [Mặc định: 1]
+     - limit       <int>     : Số bản ghi mỗi trang [Mặc định: 50]
+
+     Ví dụ gọi API:
+     GET api/tiep-don/danh-sach
+       → DS tất cả phiếu khám hôm nay, trang 1
+
+     GET api/tiep-don/danh-sach?trangThai=0
+       → Lọc chỉ bệnh nhân đang chờ khám hôm nay
+
+     GET api/tiep-don/danh-sach?search=nguyen&maBacSi=BS001
+       → Tìm BN tên Nguyễn được chỉ định cho BS001
+
+     GET api/tiep-don/danh-sach?ngayKham=2026-06-01
+       → DS phiếu khám ngày 01/06/2026
+
+10.5 Output (khi thành công) — HTTP 200 OK
+     {
+         "data": [
+             {
+                 "maPhieu":       <string>,  // Mã phiếu khám
+                 "maBN":          <string>,  // Mã bệnh nhân
+                 "hoTen":         <string>,  // Họ và tên (CHỮ HOA)
+                 "ngaySinh":      <string>,  // Ngày sinh (YYYY-MM-DD)
+                 "gioiTinh":      <string>,  // "Nam" | "Nữ" | "Khác"
+                 "sdt":           <string>,  // Số điện thoại
+                 "diaChi":        <string>,  // Địa chỉ (có thể null)
+                 "tenBacSi":      <string>,  // Tên bác sĩ chỉ định (có thể null)
+                 "maBacSi":       <string>,  // Mã bác sĩ (có thể null)
+                 "lyDoKham":      <string>,  // Lý do đến khám
+                 "ngayKham":      <string>,  // Thời điểm tiếp nhận (ISO 8601)
+                 "trangThaiKham": <int>      // 0 | 1 | 2 | 3
+             }
+         ],
+         "pagination": {
+             "page":       <int>,   // Trang hiện tại
+             "limit":      <int>,   // Số bản ghi mỗi trang
+             "total":      <int>,   // Tổng số bản ghi thỏa điều kiện
+             "totalPages": <int>    // Tổng số trang
+         },
+         "filter": {
+             "ngayKham":  <string>,  // Ngày đang lọc (YYYY-MM-DD)
+             "trangThai": <int>,     // Trạng thái đang lọc (nếu có)
+             "maBacSi":   <string>,  // Bác sĩ đang lọc (nếu có)
+             "search":    <string>   // Từ khoá đang tìm (nếu có)
+         }
+     }
+
+10.6 Xử lý lỗi
+     10.6.1 Giá trị trangThai không hợp lệ (không phải 0, 1, 2, 3)
+            → HTTP 400 Bad Request
+            → Thông báo: "Giá trị trạng thái không hợp lệ. Chỉ chấp nhận: 0 | 1 | 2 | 3"
+
+     10.6.2 Định dạng ngayKham không hợp lệ
+            → HTTP 400 Bad Request
+            → Thông báo: "Định dạng ngày lọc không hợp lệ. Vui lòng nhập theo định dạng YYYY-MM-DD!"
+
+     10.6.3 Giá trị page hoặc limit không hợp lệ
+            → HTTP 400 Bad Request
+            → Thông báo: "Giá trị phân trang không hợp lệ"
+
+     10.6.4 Token không hợp lệ hoặc hết hạn
+            → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+     10.6.5 Tài khoản không có quyền truy cập
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+     10.6.6 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+11. XEM CHI TIẾT HỒ SƠ BỆNH NHÂN
+================================================================
+11.1 Tên API
+     GET api/tiep-don/{maPhieu}
+
+11.2 Mô tả
+     Trả về toàn bộ thông tin của một lượt khám theo maPhieu, bao gồm:
+     thông tin cá nhân bệnh nhân, thông tin phiếu khám (sinh hiệu,
+     chẩn đoán, lời dặn), danh sách chỉ định cận lâm sàng và đơn
+     thuốc đã kê (nếu có).
+
+     Trang này hiển thị sau khi người dùng click vào tên bệnh nhân
+     hoặc nút "Xem chi tiết" (icon mắt) trong DanhSachTiepNhan.
+
+11.3 Phân quyền
+     - Yêu cầu token hợp lệ trong Header Authorization
+     - Role được phép: LeTan, BacSi, Admin
+
+11.4 Input
+     Header:
+     - Authorization  <string> : "Bearer {token}"
+
+     URL Parameter:
+     - maPhieu   <string> : Mã phiếu khám cần xem — BẮT BUỘC
+
+     Ví dụ Request:
+     GET api/tiep-don/PK_260609_001
+
+11.5 Quy trình xử lý tại server
+     B1: Xác thực token và quyền truy cập
+     B2: Kiểm tra maPhieu tồn tại trong bảng PhieuKham
+     B3: JOIN dữ liệu từ các bảng liên quan:
+         - BenhNhan         → Thông tin cá nhân
+         - NhanVien (BS)    → Tên bác sĩ phụ trách
+         - NhanVien (LT)    → Tên lễ tân tiếp đón
+         - DanhMucICD       → Tên bệnh ICD
+         - ChiTietCanLamSang + DichVuYTe → Danh sách CLS chỉ định
+         - DonThuoc + ChiTietDonThuoc + DanhMucThuoc → Đơn thuốc
+     B4: Trả về object tổng hợp đầy đủ
+
+11.6 Output (khi thành công) — HTTP 200 OK
+     {
+         "maPhieu":       <string>,   // Mã phiếu khám
+         "ngayKham":      <string>,   // Thời điểm tiếp nhận (ISO 8601)
+         "trangThaiKham": <int>,      // 0 | 1 | 2 | 3
+
+         // --- Thông tin bệnh nhân ---
+         "maBN":          <string>,
+         "hoTen":         <string>,   // Họ tên (CHỮ HOA)
+         "ngaySinh":      <string>,   // YYYY-MM-DD
+         "gioiTinh":      <string>,
+         "sdt":           <string>,
+         "diaChi":        <string>,   // có thể null
+         "tienSuBenh":    <string>,   // có thể null
+
+         // --- Thông tin tiếp nhận ---
+         "maBacSi":       <string>,   // có thể null
+         "tenBacSi":      <string>,   // họ tên bác sĩ, có thể null
+         "tenLeTan":      <string>,   // lễ tân tiếp đón
+         "lyDoKham":      <string>,
+
+         // --- Sinh hiệu (do bác sĩ cập nhật sau, có thể null) ---
+         "mach":          <int>,      // lần/phút
+         "nhietDo":       <float>,    // °C
+         "huyetAp":       <string>,   // VD: "120/80"
+         "canNang":       <float>,    // kg
+         "chieuCao":      <float>,    // cm
+         "spo2":          <float>,    // % (frontend tự tính từ dữ liệu thực tế)
+         "nhipTho":       <int>,      // lần/phút
+
+         // --- Chẩn đoán (do bác sĩ cập nhật sau) ---
+         "maICD":         <string>,   // có thể null
+         "tenBenh":       <string>,   // tên bệnh ICD, có thể null
+         "ketLuan":       <string>,   // kết luận / chẩn đoán xác định, có thể null
+         "loiDan":        <string>,   // lời dặn điều trị, có thể null
+
+         // --- Cận lâm sàng ---
+         "canLamSang": [
+             {
+                 "maChiTiet":  <int>,
+                 "maDV":       <string>,
+                 "tenDV":      <string>,   // tên dịch vụ / xét nghiệm
+                 "ketQua":     <string>,   // kết quả (có thể null nếu chưa làm)
+                 "trangThaiCLS": <int>     // 0=Chưa làm | 1=Đã làm | 2=BS đã đọc
+             }
+         ],
+
+         // --- Đơn thuốc ---
+         "donThuoc": {
+             "maDonThuoc":  <string>,  // có thể null nếu chưa kê
+             "ngayKeDon":   <string>,  // ISO 8601, có thể null
+             "loiDan":      <string>,  // lời dặn khi dùng thuốc, có thể null
+             "chiTiet": [
+                 {
+                     "maThuoc":    <string>,
+                     "tenThuoc":   <string>,
+                     "soLuong":    <int>,
+                     "cachDung":   <string>,  // liều dùng & cách dùng
+                     "donViTinh":  <string>   // Viên, Vỉ, Hộp, Chai...
+                 }
+             ]
+         }
+     }
+
+11.7 Xử lý lỗi
+     11.7.1 maPhieu không tồn tại trong hệ thống
+            → HTTP 404 Not Found
+            → Thông báo: "Không tìm thấy hồ sơ bệnh án. Phiếu khám có thể đã bị xóa hoặc không tồn tại!"
+
+     11.7.2 Token không hợp lệ hoặc hết hạn
+            → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+     11.7.3 Tài khoản không có quyền truy cập
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+     11.7.4 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+
+
+================================================================
+GHI CHÚ CHUNG CHO CONTROLLER
+================================================================
+
+1. ROUTE PREFIX
+   [Route("api/tiep-don")]
+   [ApiController]
+
+2. PHÂN QUYỀN THEO TỪNG ACTION
+   Action 8  — Tra cứu BN theo SĐT : [Authorize(Roles = "LeTan,Admin")]
+   Action 9  — Tiếp nhận BN         : [Authorize(Roles = "LeTan,Admin")]
+   Action 10 — Danh sách tiếp đón   : [Authorize(Roles = "LeTan,BacSi,Admin")]
+   Action 11 — Xem chi tiết hồ sơ   : [Authorize(Roles = "LeTan,BacSi,Admin")]
+
+3. HTTP STATUS CODE QUY CHUẨN
+   200 OK           → Thành công (GET)
+   201 Created      → Tạo mới thành công (POST)
+   400 Bad Request  → Dữ liệu đầu vào không hợp lệ
+   401 Unauthorized → Token không hợp lệ / hết hạn
+   403 Forbidden    → Không có quyền truy cập
+   404 Not Found    → Không tìm thấy tài nguyên
+   500 Server Error → Lỗi server hoặc database
+
+4. QUY TẮC SINH MÃ TỰ ĐỘNG (SERVER-SIDE)
+   maBN    : "BN" + yyMMdd + stt 3 chữ số theo ngày
+             Ví dụ: BN260609001, BN260609002
+             → Lấy MAX(stt) trong ngày từ DB, tăng lên 1
+             → Đảm bảo không bị race condition bằng transaction
+
+   maPhieu : "PK_" + yyMMdd + "_" + stt 3 chữ số theo ngày
+             Ví dụ: PK_260609_001, PK_260609_002
+             → Tương tự cơ chế sinh maBN
+
+5. LƯU Ý TÁCH 2 BẢNG: BenhNhan & PhieuKham
+   - Bảng BenhNhan lưu thông tin nhân khẩu học (ít thay đổi)
+   - Bảng PhieuKham lưu thông tin từng lượt khám (tạo mới mỗi lần đến)
+   - Một bệnh nhân có thể có NHIỀU PhieuKham theo thời gian
+   - API Tiếp nhận (POST) phân biệt BN cũ / mới qua việc client
+     có truyền maBN lên hay không
+
+6. TRƯỜNG DỮ LIỆU DO BÁC SĨ CẬP NHẬT SAU
+   Các trường sau KHÔNG do lễ tân nhập lúc tiếp đón mà do bác sĩ
+   cập nhật qua màn hình khám bệnh (API riêng):
+   - Sinh hiệu: Mach, NhietDo, HuyetAp, CanNang, ChieuCao
+   - Chẩn đoán: MaICD (cập nhật lại), KetLuan, LoiDan
+   - Chỉ định CLS: ChiTietCanLamSang
+   - Đơn thuốc: DonThuoc, ChiTietDonThuoc
+   API chi tiết hồ sơ (GET /{maPhieu}) trả về toàn bộ để hiển thị
+   dù các trường này còn null.
+
+7. MẶC ĐỊNH NGÀY LỌC (ACTION 10)
+   Khi không truyền tham số ngayKham → server tự lấy GETDATE() ngày
+   hiện tại để lọc, tránh trả về toàn bộ lịch sử gây chậm hệ thống.
+
+================================================================

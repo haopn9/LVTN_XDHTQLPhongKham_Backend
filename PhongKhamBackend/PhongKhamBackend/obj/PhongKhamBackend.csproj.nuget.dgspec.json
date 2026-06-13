@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\PhongKhamBackend.csproj": {}
+    "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\phongkhambackend\\phongkhambackend\\PhongKhamBackend.csproj": {}
   },
   "projects": {
-    "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\PhongKhamBackend.csproj": {
+    "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\phongkhambackend\\phongkhambackend\\PhongKhamBackend.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\PhongKhamBackend.csproj",
+        "projectUniqueName": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\phongkhambackend\\phongkhambackend\\PhongKhamBackend.csproj",
         "projectName": "PhongKhamBackend",
-        "projectPath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\PhongKhamBackend.csproj",
+        "projectPath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\phongkhambackend\\phongkhambackend\\PhongKhamBackend.csproj",
         "packagesPath": "C:\\Users\\Hao Phan\\.nuget\\packages\\",
-        "outputPath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend\\obj\\",
+        "outputPath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\phongkhambackend\\phongkhambackend\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
@@ -50,6 +50,14 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "BCrypt.Net-Next": {
+              "target": "Package",
+              "version": "[4.2.0, )"
+            },
+            "Microsoft.AspNetCore.Authentication.JwtBearer": {
+              "target": "Package",
+              "version": "[8.0.28, )"
+            },
             "Microsoft.EntityFrameworkCore.SqlServer": {
               "target": "Package",
               "version": "[8.0.28, )"
@@ -59,6 +67,10 @@
               "suppressParent": "All",
               "target": "Package",
               "version": "[8.0.28, )"
+            },
+            "Microsoft.IdentityModel.Tokens": {
+              "target": "Package",
+              "version": "[8.18.0, )"
             },
             "Swashbuckle.AspNetCore": {
               "target": "Package",

@@ -138,7 +138,6 @@ C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\staticwebassets.development.json
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\staticwebassets.build.endpoints.json
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\swae.build.ex.cache
-C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKha.29382098.Up2Date
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKhamBackend.dll
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\refint\PhongKhamBackend.dll
@@ -146,3 +145,5 @@ C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKhamBackend.genruntimeconfig.cache
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\ref\PhongKhamBackend.dll
 C:\LVTN\LVTN_XDHTQLPhongKham_Backend\PhongKhamBackend\PhongKhamBackend\obj\Debug\net8.0\PhongKhamBackend.sourcelink.json
+C:\LVTN\LVTN_XDHTQLPhongKham_Backend\phongkhambackend\phongkhambackend\bin\Debug\net8.0\BCrypt-Net-Next.dll
+C:\LVTN\LVTN_XDHTQLPhongKham_Backend\phongkhambackend\phongkhambackend\bin\Debug\net8.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
