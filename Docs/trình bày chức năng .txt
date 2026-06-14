@@ -97,45 +97,57 @@
 
 
 ================================================================
-3. ĐỔI MẬT KHẨU
+3. ĐỔI MẬT KHẨU (khi đã đăng nhập)
 ================================================================
 3.1 Tên API
-    PUT api/nguoidung/DoiMatKhau
+    PUT api/NhanSu/DoiMatKhau
 
-3.2 Quy trình
-    B1: Người dùng click "Đổi mật khẩu"
+3.2 Mô tả
+    Cho phép nhân sự đang đăng nhập tự đổi mật khẩu của mình.
+    Danh tính được xác thực qua JWT token, không cần truyền userID thủ công.
+    Sau khi đổi thành công, token hiện tại bị vô hiệu hóa → yêu cầu đăng nhập lại.
+
+3.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization [Authorize]
+    - Tất cả Role đều được phép gọi API này (áp dụng cho mọi nhân sự)
+
+3.4 Quy trình
+    B1: Người dùng click "Đổi mật khẩu" tại trang Home
     B2: Người dùng nhập mật khẩu cũ, mật khẩu mới, nhập lại mật khẩu mới
     B3: Hệ thống kiểm tra real-time các ràng buộc mật khẩu mới trong khi người dùng nhập
     B4: Người dùng submit form
     B5: Client gửi request kèm token lên server
     B6: Server xác thực token, xác định userID từ token
-    B7: Server kiểm tra mật khẩu cũ có khớp không (so sánh với PasswordHash trong bảng Users)
-    B8: Server kiểm tra mật khẩu mới không trùng mật khẩu cũ
-    B9: Server hash mật khẩu mới và cập nhật vào bảng Users
-    B10: Server vô hiệu hóa token hiện tại, yêu cầu đăng nhập lại
-    B11: Client nhận thông báo thành công, chuyển về trang đăng nhập
+    B7: Server truy vấn tài khoản theo userID từ bảng Users
+    B8: Server kiểm tra mật khẩu cũ có khớp không (BCrypt.Verify với PasswordHash)
+    B9: Server kiểm tra mật khẩu mới không trùng mật khẩu cũ
+    B10: Server hash mật khẩu mới và cập nhật vào bảng Users
+    B11: Server vô hiệu hóa token hiện tại (đưa vào blacklist)
+    B12: Client nhận thông báo thành công, chuyển về trang đăng nhập
 
-3.3 Input (Header + Body)
+3.5 Input (Header + Body)
     Header:
-    - Authorization  <string> : "Bearer {token}" - Bắt buộc, xác thực người dùng
-      (UserID sẽ được lấy tự động từ token, không cần truyền thủ công)
+    - Authorization          <string> : "Bearer {token}" — Bắt buộc
+      (UserID lấy tự động từ token, không cần truyền thủ công)
 
     Body:
     - matKhauCu              <string> : Mật khẩu hiện tại
     - matKhauMoi             <string> : Mật khẩu mới muốn đặt
     - nhapLaiMatKhauMoi      <string> : Nhập lại mật khẩu mới để xác nhận
 
-3.4 Output (khi thành công)
+3.6 Output (khi thành công) — HTTP 200 OK
     - message        <string> : "Cập nhật mật khẩu mới thành công. Vui lòng đăng nhập lại"
 
-3.5 Ràng buộc
-    3.5.1 Không để trống bất kỳ trường nào
+3.7 Ràng buộc
+    3.7.1 Không để trống bất kỳ trường nào
 
-    3.5.2 Mật khẩu cũ phải chính xác (khớp với PasswordHash trong bảng Users)
+    3.7.2 Yêu cầu token hợp lệ trong header (người dùng phải đang đăng nhập)
 
-    3.5.3 Mật khẩu mới không được trùng với mật khẩu cũ
+    3.7.3 Mật khẩu cũ phải chính xác (khớp với PasswordHash trong bảng Users)
 
-    3.5.4 Mật khẩu mới phải tuân theo quy tắc (kiểm tra real-time):
+    3.7.4 Mật khẩu mới không được trùng với mật khẩu cũ
+
+    3.7.5 Mật khẩu mới phải tuân theo quy tắc (kiểm tra real-time):
           + Độ dài từ 8 đến 12 ký tự
           + Có ít nhất 1 chữ thường (a-z)
           + Có ít nhất 1 chữ hoa (A-Z)
@@ -143,32 +155,118 @@
           + Có ít nhất 1 ký tự đặc biệt (!, @, #, $, %, ...)
           + Không chứa khoảng trắng
 
-    3.5.5 Nhập lại mật khẩu mới phải trùng khớp với mật khẩu mới
+    3.7.6 Nhập lại mật khẩu mới phải trùng khớp với mật khẩu mới
 
-    3.5.6 Yêu cầu token hợp lệ trong header (người dùng phải đang đăng nhập)
+3.8 Xử lý lỗi
+    3.8.1 Người dùng để trống một hoặc nhiều trường
+          → HTTP 400 | Thông báo: "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết"
 
-3.6 Xử lý lỗi
-    3.6.1 Người dùng để trống một hoặc nhiều trường
-          → Thông báo: "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết"
+    3.8.2 Người dùng nhập sai mật khẩu cũ
+          → HTTP 400 | Thông báo: "Mật khẩu cũ không chính xác"
 
-    3.6.2 Người dùng nhập sai mật khẩu cũ
-          → Thông báo: "Mật khẩu cũ không chính xác"
+    3.8.3 Mật khẩu mới trùng với mật khẩu cũ
+          → HTTP 400 | Thông báo: "Mật khẩu mới không được trùng với mật khẩu cũ"
 
-    3.6.3 Mật khẩu mới trùng với mật khẩu cũ
-          → Thông báo: "Mật khẩu mới không được trùng với mật khẩu cũ"
+    3.8.4 Mật khẩu mới không đạt quy tắc (kiểm tra real-time từng điều kiện)
+          → HTTP 400 | chiTiet: [danh sách điều kiện chưa đạt]
+          → Frontend hiển thị trực tiếp các điều kiện chưa đạt bên dưới ô nhập
 
-    3.6.4 Mật khẩu mới không đạt quy tắc (kiểm tra real-time từng điều kiện)
-          → Hiển thị trực tiếp các điều kiện chưa đạt bên dưới ô nhập
+    3.8.5 Nhập lại mật khẩu mới không khớp với mật khẩu mới
+          → HTTP 400 | Thông báo: "Nhập lại mật khẩu không khớp"
 
-    3.6.5 Nhập lại mật khẩu mới không khớp với mật khẩu mới
-          → Thông báo: "Nhập lại mật khẩu không khớp"
-
-    3.6.6 Token không hợp lệ hoặc hết hạn
-          → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+    3.8.6 Token không hợp lệ hoặc hết hạn
+          → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
           → Chuyển về trang đăng nhập
 
-    3.6.7 Hệ thống không kết nối được API hoặc Database
-          → Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+    3.8.7 Hệ thống không kết nối được API hoặc Database
+          → HTTP 503 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+3b. QUÊN MẬT KHẨU (chưa đăng nhập)
+================================================================
+3b.1 Tên API
+     POST api/xacthuc/QuenMatKhau
+
+3b.2 Mô tả
+     Cho phép nhân sự đặt lại mật khẩu khi quên, xác thực danh tính
+     qua Email + Số điện thoại thay vì JWT token.
+     Không yêu cầu đăng nhập trước — endpoint public (không có [Authorize]).
+
+3b.3 Phân quyền
+     Không yêu cầu token — tất cả đều có thể gọi từ trang đăng nhập
+
+3b.4 Quy trình
+     B1: Người dùng click "Quên mật khẩu" tại trang đăng nhập
+     B2: Người dùng nhập Email, Số điện thoại, mật khẩu mới, nhập lại mật khẩu mới
+     B3: Hệ thống kiểm tra real-time các ràng buộc mật khẩu mới trong khi người dùng nhập
+     B4: Người dùng submit form
+     B5: Client gửi request lên server (không kèm token)
+     B6: Server tìm tài khoản theo Email (cột Username trong bảng Users)
+     B7: Server JOIN sang bảng NhanVien, kiểm tra Số điện thoại khớp (cột SDT)
+     B8: Server kiểm tra tài khoản đang hoạt động (IsActive = 1)
+     B9: Server kiểm tra mật khẩu mới không trùng mật khẩu hiện tại
+     B10: Server hash mật khẩu mới và cập nhật vào bảng Users
+     B11: Trả về thành công, client chuyển về trang đăng nhập
+
+3b.5 Input (Body)
+     - email                  <string> : Email đăng nhập (cột Username trong bảng Users)
+     - soDienThoai            <string> : Số điện thoại đã đăng ký (cột SDT trong bảng NhanVien)
+     - matKhauMoi             <string> : Mật khẩu mới muốn đặt
+     - nhapLaiMatKhauMoi      <string> : Nhập lại mật khẩu mới để xác nhận
+
+3b.6 Output (khi thành công) — HTTP 200 OK
+     - message        <string> : "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại"
+
+3b.7 Ràng buộc
+     3b.7.1 Không để trống bất kỳ trường nào
+
+     3b.7.2 Email phải đúng định dạng (vd: example@gmail.com)
+
+     3b.7.3 Email phải tồn tại trong hệ thống (bảng Users, cột Username)
+
+     3b.7.4 Số điện thoại phải khớp với SĐT của nhân viên có email đó
+            (JOIN Users → NhanVien theo UserID, kiểm tra cột SDT)
+
+     3b.7.5 Tài khoản phải đang hoạt động (IsActive = 1)
+
+     3b.7.6 Mật khẩu mới phải tuân theo quy tắc (kiểm tra real-time):
+            + Độ dài từ 8 đến 12 ký tự
+            + Có ít nhất 1 chữ thường (a-z)
+            + Có ít nhất 1 chữ hoa (A-Z)
+            + Có ít nhất 1 chữ số (0-9)
+            + Có ít nhất 1 ký tự đặc biệt (!, @, #, $, %, ...)
+            + Không chứa khoảng trắng
+
+     3b.7.7 Mật khẩu mới không được trùng mật khẩu hiện tại
+
+     3b.7.8 Nhập lại mật khẩu mới phải trùng khớp với mật khẩu mới
+
+3b.8 Xử lý lỗi
+     3b.8.1 Để trống một hoặc nhiều trường
+            → HTTP 400 | Thông báo: "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết"
+
+     3b.8.2 Email không đúng định dạng
+            → HTTP 400 | Thông báo: "Email không đúng định dạng"
+
+     3b.8.3 Email không tồn tại hoặc Số điện thoại không khớp
+            → HTTP 400 | Thông báo: "Email hoặc số điện thoại không chính xác"
+            (Gộp chung 2 trường hợp để tránh lộ thông tin tài khoản)
+
+     3b.8.4 Tài khoản bị vô hiệu hóa (IsActive = 0)
+            → HTTP 400 | Thông báo: "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên"
+
+     3b.8.5 Mật khẩu mới không đạt quy tắc (kiểm tra real-time từng điều kiện)
+            → HTTP 400 | chiTiet: [danh sách điều kiện chưa đạt]
+            → Frontend hiển thị trực tiếp các điều kiện chưa đạt bên dưới ô nhập
+
+     3b.8.6 Mật khẩu mới trùng mật khẩu hiện tại
+            → HTTP 400 | Thông báo: "Mật khẩu mới không được trùng với mật khẩu hiện tại"
+
+     3b.8.7 Nhập lại mật khẩu không khớp
+            → HTTP 400 | Thông báo: "Nhập lại mật khẩu không khớp"
+
+     3b.8.8 Hệ thống không kết nối được API hoặc Database
+            → HTTP 503 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+
 ================================================================
         THIẾT KẾ API - CRUD NHÂN VIÊN
         Controller: NguoiDungController.cs

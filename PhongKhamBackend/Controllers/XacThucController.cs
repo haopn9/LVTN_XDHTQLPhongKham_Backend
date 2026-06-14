@@ -240,4 +240,148 @@ public class XacThucController : ControllerBase
         5 => "QuanLyKhoThuoc",
         _ => "Unknown"
     };
+
+    // DTO cho Quên mật khẩu
+    public class QuenMatKhauRequest
+    {
+        public string Email             { get; set; } = string.Empty;
+        public string SoDienThoai       { get; set; } = string.Empty;
+        public string MatKhauMoi        { get; set; } = string.Empty;
+        public string NhapLaiMatKhauMoi { get; set; } = string.Empty;
+    }
+
+    // POST api/xacthuc/QuenMatKhau
+    // Đặt lại mật khẩu khi quên — không cần đăng nhập.
+    // Xác thực danh tính qua Email + Số điện thoại.
+    [HttpPost("QuenMatKhau")]
+    [AllowAnonymous]
+    public async Task<IActionResult> QuenMatKhau([FromBody] QuenMatKhauRequest request)
+    {
+        
+        // Không để trống bất kỳ trường nào
+        if (string.IsNullOrWhiteSpace(request.Email)
+            || string.IsNullOrWhiteSpace(request.SoDienThoai)
+            || string.IsNullOrWhiteSpace(request.MatKhauMoi)
+            || string.IsNullOrWhiteSpace(request.NhapLaiMatKhauMoi))
+        {
+            return BadRequest(new { message = "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết" });
+        }
+
+        
+        // Email phải đúng định dạng
+        if (!System.Text.RegularExpressions.Regex.IsMatch(
+                request.Email.Trim(),
+                @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            return BadRequest(new { message = "Email không đúng định dạng" });
+        }
+
+      
+        // Mật khẩu mới phải đạt quy tắc
+       
+        var loiMatKhau = KiemTraQuyTacMatKhau(request.MatKhauMoi);
+        if (loiMatKhau.Count > 0)
+        {
+            return BadRequest(new
+            {
+                message = "Mật khẩu mới không đạt yêu cầu",
+                chiTiet = loiMatKhau
+            });
+        }
+
+        
+        // Nhập lại mật khẩu mới phải trùng khớp
+       
+        if (request.MatKhauMoi != request.NhapLaiMatKhauMoi)
+        {
+            return BadRequest(new { message = "Nhập lại mật khẩu không khớp" });
+        }
+
+        
+        //  Tìm tài khoản theo Email + kiểm tra SĐT
+        
+        User? user;
+        try
+        {
+            string emailInput = request.Email.Trim();
+            user = await _context.Users
+                .Include(u => u.NhanVien)
+                .FirstOrDefaultAsync(u => u.Username == emailInput);
+        }
+        catch (Exception)
+        {
+        
+            return StatusCode(503, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+
+       
+        // Email phải tồn tại & SĐT phải khớp
+        // (Gộp chung để không lộ thông tin tài khoản)
+       
+        string sdtInput = request.SoDienThoai.Trim();
+        if (user == null || user.NhanVien == null || user.NhanVien.Sdt != sdtInput)
+        {
+            return BadRequest(new { message = "Email hoặc số điện thoại không chính xác" });
+        }
+
+       
+        // Tài khoản phải đang hoạt động
+     
+        if (user.IsActive == false)
+        {
+            return BadRequest(new { message = "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên" });
+        }
+
+        
+        //  Mật khẩu mới không được trùng mật khẩu hiện tại
+       
+        if (BCrypt.Net.BCrypt.Verify(request.MatKhauMoi, user.PasswordHash))
+        {
+            return BadRequest(new { message = "Mật khẩu mới không được trùng với mật khẩu hiện tại" });
+        }
+
+       
+        //  Hash mật khẩu mới và cập nhật vào DB
+        
+        try
+        {
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.MatKhauMoi);
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception)
+        {
+          
+            return StatusCode(503, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+
+        return Ok(new { message = "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại" });
+    }
+
+   
+    // Kiểm tra quy tắc mật khẩu (trả về danh sách lỗi)
+    
+    private static List<string> KiemTraQuyTacMatKhau(string matKhau)
+    {
+        var loi = new List<string>();
+
+        if (matKhau.Length < 8 || matKhau.Length > 12)
+            loi.Add("Mật khẩu phải có độ dài từ 8 đến 12 ký tự");
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(matKhau, @"[a-z]"))
+            loi.Add("Mật khẩu phải có ít nhất 1 chữ thường (a-z)");
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(matKhau, @"[A-Z]"))
+            loi.Add("Mật khẩu phải có ít nhất 1 chữ hoa (A-Z)");
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(matKhau, @"[0-9]"))
+            loi.Add("Mật khẩu phải có ít nhất 1 chữ số (0-9)");
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(matKhau, @"[!@#$%^&*()\-_=+\[\]{};:'"",.<>/?\\|`~]"))
+            loi.Add("Mật khẩu phải có ít nhất 1 ký tự đặc biệt (!@#$%...)");
+
+        if (matKhau.Contains(' '))
+            loi.Add("Mật khẩu không được chứa khoảng trắng");
+
+        return loi;
+    }
 }
