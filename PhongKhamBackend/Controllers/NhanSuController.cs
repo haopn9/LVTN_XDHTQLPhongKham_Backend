@@ -10,13 +10,13 @@ namespace PhongKhamBackend.Controllers;
 
 [ApiController]
 [Authorize]   // Tất cả endpoint trong controller này đều yêu cầu đăng nhập
-public class NguoiDungController : ControllerBase
+public class NhanSuController : ControllerBase
 {
     private readonly QuanLyPhongKhamDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IMemoryCache _cache;
 
-    public NguoiDungController(QuanLyPhongKhamDbContext context, IConfiguration configuration, IMemoryCache cache)
+    public NhanSuController(QuanLyPhongKhamDbContext context, IConfiguration configuration, IMemoryCache cache)
     {
         _context = context;
         _configuration = configuration;
@@ -33,7 +33,28 @@ public class NguoiDungController : ControllerBase
         public string NhapLaiMatKhauMoi { get; set; } = string.Empty;
     }
 
-    
+    public class ThemNhanVienRequest
+    {
+        public string MaNV      { get; set; } = string.Empty;
+        public string HoTen     { get; set; } = string.Empty;
+        public string Sdt       { get; set; } = string.Empty;
+        public string Email     { get; set; } = string.Empty;  // BẮT BUỘC — dùng làm username đăng nhập
+        public string? ChuyenMon { get; set; }
+        public string Password  { get; set; } = string.Empty;
+        public int RoleID       { get; set; }
+        public bool IsActive    { get; set; }
+    }
+
+    public class CapNhatNhanVienRequest
+    {
+        public string HoTen     { get; set; } = string.Empty;
+        public string Sdt       { get; set; } = string.Empty;
+        public string Email     { get; set; } = string.Empty;  // BẮT BUỘC — đồng bộ làm username
+        public string? ChuyenMon { get; set; }
+        public string? Password { get; set; }
+        public int RoleID       { get; set; }
+        public bool IsActive    { get; set; }
+    }
 
     
     // PUT api/NhanSu/DoiMatKhau
@@ -175,4 +196,437 @@ public class NguoiDungController : ControllerBase
 
         return lỗi;
     }
+
+    // GET api/nhan-vien  —  Lấy danh sách nhân viên
+    //Lấy danh sách nhân viên có hỗ trợ lọc theo trạng thái, tìm kiếm và phân trang.
+    //Mặc định trả về danh sách nhân viên còn hoạt động.
+   
+    [HttpGet("api/nhan-su")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> LayDanhSachNhanVien(
+        [FromQuery] string status = "active",
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 20,
+        [FromQuery] string? search = null,
+        [FromQuery] int? roleID = null)
+    {
+        try
+        {
+            // kiểm tra status
+            if (status != "active" && status != "inactive")
+            {
+                return BadRequest(new { message = "Giá trị status không hợp lệ. Chỉ chấp nhận: active | inactive" });
+            }
+
+            // kiểm tra page và limit
+            if (page <= 0 || limit <= 0)
+            {
+                return BadRequest(new { message = "Giá trị phân trang không hợp lệ" });
+            }
+
+            // Giới hạn tối đa 100 bản ghi mỗi trang
+            if (limit > 100) limit = 100;
+
+           
+            // Xây dựng query
+            bool isActive = status == "active";
+
+            var query = _context.NhanViens
+                .Include(nv => nv.User)
+                    .ThenInclude(u => u!.Role)
+                .Where(nv => nv.User != null && nv.User.IsActive == isActive);
+
+            // Lọc theo roleID
+            if (roleID.HasValue)
+            {
+                query = query.Where(nv => nv.User!.RoleId == roleID.Value);
+            }
+
+            // Tìm kiếm theo Họ tên hoặc Mã nhân viên
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string searchTrim = search.Trim().ToLower();
+                query = query.Where(nv =>
+                    nv.HoTen.ToLower().Contains(searchTrim) ||
+                    nv.MaNv.ToLower().Contains(searchTrim));
+            }
+
+        
+            // Đếm tổng số bản ghi thỏa điều kiệ
+            int total = await query.CountAsync();
+            int totalPages = (int)Math.Ceiling((double)total / limit);
+
+          
+            // Phân trang và lấy dữ liệu
+            var danhSach = await query
+                .OrderBy(nv => nv.MaNv)
+                .Skip((page - 1) * limit)
+                .Take(limit)
+                .Select(nv => new
+                {
+                    maNV     = nv.MaNv,
+                    hoTen    = nv.HoTen,
+                    sdt      = nv.Sdt,
+                    email    = nv.Email,
+                    chuyenMon = nv.ChuyenMon,
+                    username = nv.User!.Username,
+                    roleID   = nv.User.RoleId,
+                    roleName = nv.User.Role!.RoleName,
+                    isActive = nv.User.IsActive
+                })
+                .ToListAsync();
+
+            // Thêm số thứ tự (tính theo trang hiện tại)
+            var data = danhSach.Select((item, index) => new
+            {
+                stt      = (page - 1) * limit + index + 1,
+                item.maNV,
+                item.hoTen,
+                item.sdt,
+                item.email,
+                item.chuyenMon,
+                item.username,
+                item.roleID,
+                item.roleName,
+                item.isActive
+            });
+
+            return Ok(new
+            {
+                data,
+                pagination = new
+                {
+                    page,
+                    limit,
+                    total,
+                    totalPages
+                },
+                filter = new
+                {
+                    status,
+                    search = search ?? (object?)null,
+                    roleID = roleID ?? (object?)null
+                }
+            });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
+    // POST api/nhan-vien  —  Thêm nhân viên
+    // Admin tạo tài khoản nhân viên mới vào hệ thống.
+    // Đồng thời tạo bản ghi trong cả 2 bảng: Users và NhanVien.
+    // Mật khẩu được hash BCrypt trước khi lưu vào database.
+    [HttpPost("api/nhan-su")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> ThemNhanVien([FromBody] ThemNhanVienRequest request)
+    {
+        try
+        {
+          
+            // VALIDATE CÁC TRƯỜNG BẮT BUỘC
+
+            // Không nhập mã nhân viên
+            if (string.IsNullOrWhiteSpace(request.MaNV))
+                return BadRequest(new { message = "Vui lòng nhập Mã nhân viên!" });
+
+            // Không nhập họ tên
+            if (string.IsNullOrWhiteSpace(request.HoTen))
+                return BadRequest(new { message = "Vui lòng nhập Họ tên nhân viên!" });
+
+            // Không nhập số điện thoại
+            if (string.IsNullOrWhiteSpace(request.Sdt))
+                return BadRequest(new { message = "Vui lòng nhập Số điện thoại!" });
+
+            // Không nhập email (email dùng làm tên đăng nhập)
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return BadRequest(new { message = "Vui lòng nhập Tên đăng nhập tài khoản!" });
+
+            // Không nhập mật khẩu
+            if (string.IsNullOrWhiteSpace(request.Password))
+                return BadRequest(new { message = "Vui lòng nhập Mật khẩu tài khoản!" });
+
+            // VALIDATE ĐỊNH DẠNG & RÀNG BUỘC
+
+            // Không chứa khoảng trắng trong mã nhân viên
+            if (request.MaNV.Contains(' '))
+                return BadRequest(new { message = "Mã nhân viên không được chứa khoảng trắng. Vui lòng nhập lại!" });
+
+            // Mã nhân viên đã tồn tại
+            bool maNvExists = await _context.NhanViens.AnyAsync(nv => nv.MaNv == request.MaNV);
+            if (maNvExists)
+                return Conflict(new { message = "Mã nhân viên đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác!" });
+
+            // Số điện thoại sai định dạng (10 chữ số, bắt đầu bằng 0, không chứa khoảng trắng)
+            if (!Regex.IsMatch(request.Sdt, @"^0\d{9}$"))
+                return BadRequest(new { message = "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0, không chứa khoảng trắng)!" });
+
+            // Số điện thoại đã tồn tại
+            bool sdtExists = await _context.NhanViens.AnyAsync(nv => nv.Sdt == request.Sdt);
+            if (sdtExists)
+                return Conflict(new { message = "Số điện thoại này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại số khác!" });
+
+            // Email sai định dạng (email bắt buộc vì dùng làm username)
+            if (request.Email.Contains(' ') || !Regex.IsMatch(request.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                return BadRequest(new { message = "Địa chỉ Email không đúng định dạng (example@mail.com, không chứa khoảng trắng)!" });
+
+            // Email đã tồn tại trong bảng NhanVien
+            bool emailExists = await _context.NhanViens.AnyAsync(nv => nv.Email == request.Email);
+            if (emailExists)
+                return Conflict(new { message = "Địa chỉ Email này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại email khác!" });
+
+            // Tên đăng nhập (= email) đã tồn tại trong bảng Users
+            bool usernameExists = await _context.Users.AnyAsync(u => u.Username == request.Email);
+            if (usernameExists)
+                return Conflict(new { message = "Tên đăng nhập này đã được sử dụng bởi tài khoản khác. Vui lòng kiểm tra & nhập lại tên đăng nhập khác!" });
+
+            // Mật khẩu chứa khoảng trắng
+            if (request.Password.Contains(' '))
+                return BadRequest(new { message = "Mật khẩu đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!" });
+
+            // RoleID không hợp lệ
+            int[] validRoles = { 1, 2, 3, 4, 5 };
+            if (!validRoles.Contains(request.RoleID))
+                return BadRequest(new { message = "Vai trò không hợp lệ. Vui lòng chọn lại!" });
+
+            
+            // TẠO BẢN GHI TRONG DATABASE
+            // Tạo User (tài khoản)
+            var newUser = new User
+            {
+                Username     = request.Email,     // Email làm username đăng nhập
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                RoleId       = request.RoleID,
+                IsActive     = request.IsActive
+            };
+
+            _context.Users.Add(newUser);
+            await _context.SaveChangesAsync(); // Lưu để lấy UserID tự sinh
+
+            // Tạo NhanVien (hồ sơ)
+            var newNhanVien = new NhanVien
+            {
+                MaNv      = request.MaNV,
+                UserId    = newUser.UserId,
+                HoTen     = request.HoTen,
+                Sdt       = request.Sdt,
+                Email     = request.Email,
+                ChuyenMon = string.IsNullOrWhiteSpace(request.ChuyenMon) ? null : request.ChuyenMon
+            };
+
+            _context.NhanViens.Add(newNhanVien);
+            await _context.SaveChangesAsync();
+
+            // Lấy tên vai trò để trả về response
+            var role = await _context.Roles.FindAsync(request.RoleID);
+
+            return StatusCode(201, new
+            {
+                message = "Thêm nhân viên thành công",
+                data = new
+                {
+                    maNV     = newNhanVien.MaNv,
+                    hoTen    = newNhanVien.HoTen,
+                    username = newUser.Username,
+                    roleName = role?.RoleName ?? "",
+                    isActive = newUser.IsActive
+                }
+            });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
+
+    // PUT api/nhan-vien/{maNV}  —  Cập nhật nhân viên
+    // Admin cập nhật thông tin nhân viên. Mã nhân viên (maNV) truyền qua URL
+    // và là trường chỉ đọc — không được thay đổi.
+    // Nếu admin nhập mật khẩu mới → server hash BCrypt và cập nhật.
+    // Nếu admin để trống mật khẩu → giữ nguyên mật khẩu cũ.
+    
+    [HttpPut("api/nhan-su/{maNV}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> CapNhatNhanVien(string maNV, [FromBody] CapNhatNhanVienRequest request)
+    {
+        try
+        {
+            // KIỂM TRA NHÂN VIÊN TỒN TẠI
+            // maNV trên URL không tồn tại
+            var nhanVien = await _context.NhanViens
+                .Include(nv => nv.User)
+                    .ThenInclude(u => u!.Role)
+                .FirstOrDefaultAsync(nv => nv.MaNv == maNV);
+
+            if (nhanVien == null || nhanVien.User == null)
+                return NotFound(new { message = "Không tìm thấy nhân viên cần cập nhật" });
+
+            // VALIDATE CÁC TRƯỜNG BẮT BUỘC
+            // Không nhập họ tên
+            if (string.IsNullOrWhiteSpace(request.HoTen))
+                return BadRequest(new { message = "Vui lòng nhập Họ tên nhân viên!" });
+
+            // Không nhập số điện thoại
+            if (string.IsNullOrWhiteSpace(request.Sdt))
+                return BadRequest(new { message = "Vui lòng nhập Số điện thoại!" });
+
+            // Số điện thoại sai định dạng
+            if (!Regex.IsMatch(request.Sdt, @"^0\d{9}$"))
+                return BadRequest(new { message = "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0, không chứa khoảng trắng)!" });
+
+            // Số điện thoại đã được sử dụng bởi nhân viên KHÁC
+            bool sdtDuplicate = await _context.NhanViens
+                .AnyAsync(nv => nv.Sdt == request.Sdt && nv.MaNv != maNV);
+            if (sdtDuplicate)
+                return Conflict(new { message = "Số điện thoại này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại số khác!" });
+
+            // Không nhập email (email dùng làm tên đăng nhập)
+            if (string.IsNullOrWhiteSpace(request.Email))
+                return BadRequest(new { message = "Vui lòng nhập Tên đăng nhập tài khoản!" });
+
+            // Email sai định dạng
+            if (request.Email.Contains(' ') || !Regex.IsMatch(request.Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                return BadRequest(new { message = "Địa chỉ Email không đúng định dạng (example@mail.com, không chứa khoảng trắng)!" });
+
+            // Email đã được sử dụng bởi nhân viên KHÁC
+            bool emailDuplicate = await _context.NhanViens
+                .AnyAsync(nv => nv.Email == request.Email && nv.MaNv != maNV);
+            if (emailDuplicate)
+                return Conflict(new { message = "Địa chỉ Email này đã được sử dụng bởi nhân viên khác. Vui lòng kiểm tra & nhập lại email khác!" });
+
+            // Tên đăng nhập (= email) đã được sử dụng bởi tài khoản KHÁC
+            bool usernameDuplicate = await _context.Users
+                .AnyAsync(u => u.Username == request.Email && u.UserId != nhanVien.UserId);
+            if (usernameDuplicate)
+                return Conflict(new { message = "Tên đăng nhập này đã được sử dụng bởi tài khoản khác. Vui lòng kiểm tra & nhập lại tên đăng nhập khác!" });
+
+            // Mật khẩu chứa khoảng trắng (nếu có nhập)
+            if (!string.IsNullOrEmpty(request.Password) && request.Password.Contains(' '))
+                return BadRequest(new { message = "Mật khẩu đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!" });
+
+            // roleID không hợp lệ
+            int[] validRoles = { 1, 2, 3, 4, 5 };
+            if (!validRoles.Contains(request.RoleID))
+                return BadRequest(new { message = "Vai trò không hợp lệ. Vui lòng chọn lại!" });
+
+          
+            // CẬP NHẬT DỮ LIỆU
+            // Cập nhật bảng NhanVien
+            nhanVien.HoTen     = request.HoTen;
+            nhanVien.Sdt       = request.Sdt;
+            nhanVien.Email     = request.Email;
+            nhanVien.ChuyenMon = string.IsNullOrWhiteSpace(request.ChuyenMon) ? null : request.ChuyenMon;
+
+            // Cập nhật bảng Users — Email đồng bộ làm Username
+            nhanVien.User!.Username = request.Email;
+            nhanVien.User.RoleId    = request.RoleID;
+            nhanVien.User.IsActive  = request.IsActive;
+
+            // Cập nhật mật khẩu nếu có nhập mới (để trống → giữ nguyên)
+            if (!string.IsNullOrEmpty(request.Password))
+            {
+                nhanVien.User.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+            }
+
+            await _context.SaveChangesAsync();
+
+            // Lấy lại roleName sau khi cập nhật
+            var role = await _context.Roles.FindAsync(request.RoleID);
+
+            return Ok(new
+            {
+                message = "Cập nhật thông tin nhân viên thành công",
+                data = new
+                {
+                    maNV     = nhanVien.MaNv,
+                    hoTen    = nhanVien.HoTen,
+                    username = nhanVien.User.Username,
+                    roleName = role?.RoleName ?? "",
+                    isActive = nhanVien.User.IsActive
+                }
+            });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
+
+    // DELETE api/nhan-vien/{maNV}  —  Xóa nhân viên
+    // Admin xóa nhân viên khỏi hệ thống. Áp dụng chiến lược xóa thông minh:
+    // - Nếu CHƯA có dữ liệu liên quan → Xóa cứng (Hard Delete)
+    // - Nếu ĐÃ có dữ liệu liên quan → Đề nghị tạm khóa thay thế
+    
+    [HttpDelete("api/nhan-su/{maNV}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> XoaNhanVien(string maNV)
+    {
+        try
+        {
+            // KIỂM TRA NHÂN VIÊN TỒN TẠI
+            // maNV trên URL không tồn tại
+            var nhanVien = await _context.NhanViens
+                .Include(nv => nv.User)
+                .FirstOrDefaultAsync(nv => nv.MaNv == maNV);
+
+            if (nhanVien == null)
+                return NotFound(new { message = "Không tìm thấy nhân viên cần xóa" });
+
+            // ADMIN TỰ XÓA CHÍNH MÌNH
+            string? userIdClaim = User.FindFirstValue("userID");
+            if (!string.IsNullOrEmpty(userIdClaim)
+                && int.TryParse(userIdClaim, out int currentUserId)
+                && nhanVien.UserId == currentUserId)
+            {
+                return BadRequest(new { message = "Không thể xóa tài khoản đang đăng nhập" });
+            }
+
+            // KIỂM TRA DỮ LIỆU LIÊN QUAN
+            bool hasPhieuKham = await _context.PhieuKhams
+                .AnyAsync(pk => pk.MaNvTiepDon == maNV || pk.MaBacSi == maNV);
+
+            bool hasHoaDon = await _context.HoaDons
+                .AnyAsync(hd => hd.MaNvThuNgan == maNV);
+
+            // CÓ DỮ LIỆU LIÊN QUAN → KHÔNG XÓA, GỢI Ý TẠM KHÓA
+            if (hasPhieuKham || hasHoaDon)
+            {
+                return Conflict(new
+                {
+                    message         = "Không thể xóa nhân viên này vì đã có dữ liệu trong hệ thống (phiếu khám, hóa đơn...)",
+                    suggestion      = "Bạn có thể tạm khóa tài khoản nhân viên này thay thế. Sử dụng API cập nhật với isActive = false",
+                    suggestedAction = $"PUT api/nhan-su/{maNV}  với  isActive: false"
+                });
+            }
+
+            // KHÔNG CÓ DỮ LIỆU LIÊN QUAN → XÓA CỨNG
+            var userToDelete = nhanVien.User;
+
+            // Xóa NhanVien trước (vì NhanVien FK → Users)
+            _context.NhanViens.Remove(nhanVien);
+            await _context.SaveChangesAsync();
+
+            // Xóa User (tài khoản đăng nhập)
+            if (userToDelete != null)
+            {
+                _context.Users.Remove(userToDelete);
+                await _context.SaveChangesAsync();
+            }
+
+            return Ok(new
+            {
+                message    = "Xóa nhân viên thành công",
+                deletedMaNV = maNV
+            });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
 }

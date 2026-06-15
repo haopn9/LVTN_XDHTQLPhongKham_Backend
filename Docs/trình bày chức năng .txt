@@ -268,21 +268,21 @@
             → HTTP 503 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
 
 ================================================================
-        THIẾT KẾ API - CRUD NHÂN VIÊN
-        Controller: NguoiDungController.cs
-        Base Route: api/nhan-vien
+        THIẾT KẾ API - CRUD NHÂN Sự
+        Controller: NhanSuController.cs
+        Base Route: api/nhan-su
         Phân quyền: Chỉ Admin mới được truy cập
 ================================================================
 
 
 ================================================================
-4. LẤY DANH SÁCH NHÂN VIÊN
+4. LẤY DANH SÁCH NHÂN SỰ
 ================================================================
 4.1 Tên API
-    GET api/nhan-vien
+    GET api/nhan-su
 
 4.2 Mô tả
-    Lấy danh sách nhân viên có hỗ trợ lọc theo trạng thái, tìm kiếm
+    Lấy danh sách nhân sự có hỗ trợ lọc theo trạng thái, tìm kiếm
     và phân trang. Mặc định trả về danh sách nhân viên còn hoạt động.
 
 4.3 Phân quyền
@@ -291,19 +291,19 @@
 
 4.4 Input (Query Parameters)
     - status    <string>  : Lọc theo trạng thái tài khoản
-                            "active"   → Nhân viên còn hoạt động (IsActive = 1) [Mặc định]
-                            "inactive" → Nhân viên bị tạm khóa  (IsActive = 0)
+                            "active"   → Nhân sự còn hoạt động (IsActive = 1) [Mặc định]
+                            "inactive" → Nhân sự bị tạm khóa  (IsActive = 0)
     - page      <int>     : Trang hiện tại [Mặc định: 1]
     - limit     <int>     : Số bản ghi mỗi trang [Mặc định: 20, Tối đa: 100]
-    - search    <string>  : Tìm kiếm theo Họ tên hoặc Mã nhân viên (tuỳ chọn)
+    - search    <string>  : Tìm kiếm theo Họ tên hoặc Mã nhân sự (tuỳ chọn)
     - roleID    <int>     : Lọc theo vai trò (tuỳ chọn)
                             1 = Admin | 2 = BacSi | 3 = LeTan | 4 = ThuNgan | 5 = QuanLyKhoThuoc
 
     Ví dụ gọi API:
-    GET api/nhan-vien                              → DS nhân viên hoạt động, trang 1
-    GET api/nhan-vien?status=inactive              → DS nhân viên tạm khóa
-    GET api/nhan-vien?search=nguyen&roleID=2       → Tìm bác sĩ tên Nguyễn
-    GET api/nhan-vien?status=active&page=2&limit=10
+    GET api/nhan-su                              → DS nhân viên hoạt động, trang 1
+    GET api/nhan-su?status=inactive              → DS nhân viên tạm khóa
+    GET api/nhan-su?search=nguyen&roleID=2       → Tìm bác sĩ tên Nguyễn
+    GET api/nhan-su?status=active&page=2&limit=10
 
 4.5 Output (khi thành công) — HTTP 200 OK
     {
@@ -312,7 +312,7 @@
                 "stt":      <int>     // Số thứ tự (tính theo trang hiện tại)
                 "maNV":     <string>  // Mã nhân viên (từ bảng NhanVien)
                 "hoTen":    <string>  // Họ và tên (từ bảng NhanVien)
-                "username": <string>  // Tên đăng nhập (từ bảng Users)
+                "username": <string>  // Tên đăng nhập lấy từ địa chỉ email
                 "roleID":   <int>     // ID vai trò (từ bảng Roles)
                 "roleName": <string>  // Tên vai trò: Admin / BacSi / LeTan / ThuNgan / QuanLyKhoThuoc
                 "isActive": <bool>    // Trạng thái: true = Hoạt động | false = Tạm khóa
@@ -354,13 +354,13 @@
 
 
 ================================================================
-5. THÊM NHÂN VIÊN
+5. THÊM NHÂN SỰ
 ================================================================
 5.1 Tên API
-    POST api/nhan-vien
+    POST api/nhan-su
 
 5.2 Mô tả
-    Admin tạo tài khoản nhân viên mới vào hệ thống. Hệ thống sẽ đồng
+    Admin tạo tài khoản nhân sự mới vào hệ thống. Hệ thống sẽ đồng
     thời tạo bản ghi trong cả 2 bảng: Users và NhanVien.
     Mật khẩu được hash BCrypt trước khi lưu vào database.
 
@@ -377,11 +377,10 @@
     - maNV      <string>  : Mã nhân viên — BẮT BUỘC (VD: NV002, BS001)
     - hoTen     <string>  : Họ và tên     — BẮT BUỘC
     - sdt       <string>  : Số điện thoại — BẮT BUỘC
-    - email     <string>  : Địa chỉ email — Tuỳ chọn
+    - email     <string>  : Địa chỉ email — BẮT BUỘC - lấy địa chỉ email làm username
     - chuyenMon <string>  : Chuyên môn    — Tuỳ chọn
 
     Tài khoản hệ thống & phân quyền (bảng Users + Roles):
-    - username  <string>  : Tên đăng nhập       — BẮT BUỘC
     - password  <string>  : Mật khẩu (plain text, server sẽ hash BCrypt) — BẮT BUỘC
                             Nếu Admin chọn mật khẩu mặc định → client tự điền "STUCaoLo"
     - roleID    <int>     : ID vai trò           — BẮT BUỘC
@@ -396,7 +395,7 @@
         "sdt":       "0901234567",
         "email":     "nguyenvanan@pkdk.com",
         "chuyenMon": "Nội khoa",
-        "username":  "nguyenvanan",
+        "username":  "nguyenvanan@pkdk.com",
         "password":  "STUCaoLo",
         "roleID":    2,
         "isActive":  true
@@ -510,7 +509,7 @@
 6. CẬP NHẬT NHÂN VIÊN
 ================================================================
 6.1 Tên API
-    PUT api/nhan-vien/{maNV}
+    PUT api/nhan-su/{maNV}
 
 6.2 Mô tả
     Admin cập nhật thông tin nhân viên. Mã nhân viên (maNV) truyền
@@ -659,7 +658,7 @@
 7. XÓA NHÂN VIÊN
 ================================================================
 7.1 Tên API
-    DELETE api/nhan-vien/{maNV}
+    DELETE api/nhan-su/{maNV}
 
 7.2 Mô tả
     Admin xóa nhân viên khỏi hệ thống. Áp dụng chiến lược xóa thông
@@ -685,7 +684,7 @@
     - Authorization  <string> : "Bearer {token}"
 
     Ví dụ Request:
-    DELETE api/nhan-vien/NV005
+    DELETE api/nhan-su/NV005
 
 7.5 Quy trình xử lý tại server
     B1: Xác thực token và quyền Admin
@@ -738,7 +737,7 @@ GHI CHÚ CHUNG CHO CONTROLLER
 ================================================================
 
 1. ROUTE PREFIX
-   [Route("api/nhan-vien")]
+   [Route("api/nhan-su")]
    [ApiController]
 
 2. PHÂN QUYỀN
