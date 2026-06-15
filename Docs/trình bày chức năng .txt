@@ -1309,3 +1309,288 @@ GHI CHÚ CHUNG CHO CONTROLLER
    hiện tại để lọc, tránh trả về toàn bộ lịch sử gây chậm hệ thống.
 
 ================================================================
+================================================================
+     TRÌNH BÀY CHỨC NĂNG - HỆ THỐNG QUẢN LÝ PHÒNG KHÁM
+           PHÂN HỆ: QUẢN LÝ DANH MỤC 
+================================================================
+     Controller : BenhLyICDController.cs
+     Base Route  : api/BenhLyICD
+     Phân quyền : Lễ tân (LeTan) & Admin & Bác sĩ 
+================================================================
+12. Lấy danh sách bệnh lý
+================================================================
+12.1 Tên API
+    GET api/BenhLyICD
+
+12.2 Mô tả
+    Lấy danh sách danh mục bệnh lý ICD có hỗ trợ lọc theo mã/tên
+    và phân trang.
+
+12.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin , Bác sĩ (BacSi) , lễ tân(LeTan)  mới được gọi API này
+
+12.4 Input (Query Parameters)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Query Parameters (tùy chọn):
+    - maICD      <string>  : Lọc theo mã ICD (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - tenBenh    <string>  : Lọc theo tên bệnh (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - page       <int>     : Số trang hiện tại (mặc định: 1)
+    - pageSize   <int>     : Số bản ghi mỗi trang (mặc định: 10)
+
+    Ví dụ Request:
+    GET api/BenhLyICD?maICD=I&page=1&pageSize=10
+12.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":      <int>     // Số thứ tự (tính theo trang hiện tại)
+                "MaICD":     <string>  // Mã ICD (từ bảng DanhMucICD)
+                "TenBenh":    <string>  // Tên bệnh lý (từ bảng DanhMucICD)
+            }
+        ],
+	"total":      <int>   // Tổng số bản ghi sau khi lọc
+        "page":       <int>   // Trang hiện tại
+        "pageSize":   <int>   // Số bản ghi mỗi trang
+        "totalPages": <int>   // Tổng số trang
+    }
+
+12.6 Xử lý lỗi
+    12.6.1 Token không hợp lệ hoặc hết hạn
+          → HTTP 401 Unauthorized
+          → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    12.6.2 Tài khoản không có quyền truy cập
+          → HTTP 403 Forbidden
+          → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    12.6.3 Hệ thống không kết nối được API hoặc Database
+          → HTTP 500 Internal Server Error
+          → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+13. Thêm danh mục bệnh lý
+================================================================
+13.1 Tên API
+    POST api/BenhLyICD
+
+13.2 Mô tả
+    Admin thêm mới một mã bệnh lý ICD vào danh mục hệ thống.
+
+13.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+13.4 Input (Header + Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body:
+    - maICD      <string>  : Mã bệnh lý ICD — BẮT BUỘC (VD: A09, I10)
+    - tenBenh    <string>  : Tên phân loại chẩn đoán bệnh — BẮT BUỘC (VD: Tiêu chảy)
+
+    Ví dụ Request Body:
+    {
+        "maICD":    "R05",
+        "tenBenh":  "Ho"
+    }
+
+13.5 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm bệnh lý thành công",
+        "data": {
+            "maICD":    <string>,
+            "tenBenh":  <string>
+        }
+    }
+
+13.6 Ràng buộc
+    13.6.1 Các trường bắt buộc: maICD, tenBenh
+
+    13.6.2 Mã bệnh lý ICD (maICD)
+           - Không được để trống
+           - Không được chứa khoảng trắng
+           - Không được trùng với mã ICD đã tồn tại trong bảng DanhMucICD
+           - Độ dài tối đa 10 ký tự
+           - Không chứa ký tự đặc biệt (@, !, #, $, %, ...)
+           * Server tự động chuyển về chữ HOA trước khi lưu
+
+    13.6.3 Tên bệnh lý (tenBenh)
+           - Không được để trống
+           - Không được trùng với tên bệnh đã tồn tại trong bảng DanhMucICD
+           - Độ dài tối đa 100 ký tự (theo định nghĩa cột trong DB)
+
+13.7 Xử lý lỗi
+    13.7.1 Không nhập mã bệnh lý ICD
+           → HTTP 400 | Thông báo: "Vui lòng nhập mã bệnh lý (ICD)"
+
+    13.7.2 Không nhập tên bệnh lý
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên phân loại chẩn đoán bệnh"
+
+    13.7.3 Mã bệnh lý ICD chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mã bệnh lý ICD không được chứa khoảng trắng. Vui lòng nhập lại"
+
+    13.7.4 Mã bệnh lý ICD vượt quá 10 ký tự
+           → HTTP 400 | Thông báo: "Mã bệnh lý ICD không được vượt quá 10 ký tự. Vui lòng nhập lại"
+
+    13.7.5 Mã bệnh lý ICD chứa ký tự đặc biệt
+           → HTTP 400 | Thông báo: "Mã bệnh lý ICD không được chứa ký tự đặc biệt. Vui lòng nhập lại"
+
+    13.7.6 Mã bệnh lý ICD đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Mã bệnh lý ICD đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
+
+    13.7.7 Tên bệnh lý đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên bệnh lý đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    13.7.8 Tên bệnh lý vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên bệnh lý không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    13.7.9 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    13.7.10 Tài khoản không có quyền Admin
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    13.7.11 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+    
+    
+================================================================
+14. Sửa danh mục bệnh lý
+================================================================
+14.1 Tên API
+    PUT api/BenhLyICD/{maICD}
+
+14.2 Mô tả
+    Admin cập nhật tên bệnh lý của một mã ICD đã tồn tại trong hệ thống.
+    Lưu ý: Không cho phép thay đổi maICD vì đây là khóa chính (PRIMARY KEY)
+    và được tham chiếu bởi bảng PhieuKham — thay đổi sẽ ảnh hưởng đến
+    toàn bộ lịch sử khám bệnh đã ghi nhận.
+
+14.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+14.4 Input (URL Parameter + Header + Request Body — JSON)
+    URL Parameter:
+    - maICD      <string>  : Mã bệnh lý cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body (JSON):
+    - tenBenh    <string>  : Tên bệnh lý mới — BẮT BUỘC
+
+    Ví dụ Request:
+    PUT api/BenhLyICD/R05
+    {
+        "tenBenh": "Ho (đã cập nhật)"
+    }
+
+14.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật thông tin bệnh lý thành công",
+        "data": {
+            "maICD":    <string>,
+            "tenBenh":  <string>
+        }
+    }
+
+14.6 Ràng buộc
+    14.6.1 Trường được phép cập nhật: tenBenh
+           (maICD là khóa chính — không được phép thay đổi)
+
+    14.6.2 Bệnh lý cần cập nhật phải tồn tại trong hệ thống
+           (maICD trên URL phải khớp với bản ghi trong bảng DanhMucICD)
+
+    14.6.3 Tên bệnh lý (tenBenh)
+           - Không được để trống
+           - Không được trùng với tên bệnh đã tồn tại trong bảng DanhMucICD
+             (ngoại trừ chính bản ghi đang cập nhật)
+           - Độ dài tối đa 100 ký tự
+
+14.7 Xử lý lỗi
+    14.7.1 maICD trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy bệnh lý cần cập nhật"
+
+    14.7.2 Không nhập tên bệnh lý
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên phân loại chẩn đoán bệnh"
+
+    14.7.3 Tên bệnh lý đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên bệnh lý đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    14.7.4 Tên bệnh lý vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên bệnh lý không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    14.7.5 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    14.7.6 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    14.7.7 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+15. Xóa danh mục bệnh lý
+================================================================
+15.1 Tên API
+    DELETE api/BenhLyICD/{maICD}
+
+15.2 Mô tả
+    Admin xóa một mã bệnh lý ICD khỏi danh mục hệ thống.
+    Không cho phép xóa nếu mã ICD đang được tham chiếu bởi bảng PhieuKham
+    (tức là đã có phiếu khám ghi nhận chẩn đoán theo mã này).
+
+15.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+15.4 Input (URL Parameter + Header)
+    URL Parameter:
+    - maICD      <string>  : Mã bệnh lý cần xóa — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    DELETE api/BenhLyICD/R05
+
+15.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Xóa bệnh lý thành công",
+        "data": {
+            "maICD":    <string>,
+            "tenBenh":  <string>
+        }
+    }
+
+15.6 Ràng buộc
+    15.6.1 Mã bệnh lý cần xóa phải tồn tại trong hệ thống
+
+    15.6.2 Không được xóa nếu maICD đang được tham chiếu trong bảng PhieuKham
+           (tức là đã có ít nhất một phiếu khám sử dụng mã chẩn đoán này)
+           → Lý do: ràng buộc khóa ngoại (FOREIGN KEY) sẽ vi phạm toàn vẹn
+             dữ liệu, đồng thời xóa sẽ làm mất thông tin chẩn đoán lịch sử
+
+15.7 Xử lý lỗi
+    15.7.1 maICD trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy bệnh lý cần xóa"
+
+    15.7.2 Mã ICD đang được sử dụng trong phiếu khám (vi phạm ràng buộc FK)
+           → HTTP 409 Conflict
+           → Thông báo: "Không thể xóa bệnh lý này vì đã có phiếu khám sử dụng mã chẩn đoán này"
+
+    15.7.3 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    15.7.4 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    15.7.5 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể xóa dữ liệu từ máy chủ. Xin hãy thử lại"
