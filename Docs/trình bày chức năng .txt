@@ -1594,3 +1594,382 @@ GHI CHÚ CHUNG CHO CONTROLLER
 
     15.7.5 Hệ thống không kết nối được API hoặc Database
            → HTTP 500 | Thông báo: "Không thể xóa dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+     Controller : DichVuYTeCLSController.cs
+     Base Route  : api/DichVuCLS
+     Phân quyền : Admin, Bác sĩ (BacSi), Thu ngân (ThuNgan)
+================================================================
+16. Lấy danh sách dịch vụ y tế cls 
+================================================================
+16.1 Tên API
+    GET api/DichVuCLS
+
+16.2 Mô tả
+    Lấy danh sách danh mục dịch vụ y tế CLS có hỗ trợ lọc theo mã/tên,
+    trạng thái và phân trang.
+
+16.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin, BacSi, ThuNgan mới được gọi API này
+      * Admin     : quản lý toàn bộ danh mục
+      * BacSi     : xem danh sách để chỉ định CLS cho bệnh nhân
+      * ThuNgan   : xem danh sách để tính phí dịch vụ trên hóa đơn
+
+16.4 Input (Query Parameters)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Query Parameters (tùy chọn):
+    - maDV       <string>  : Lọc theo mã dịch vụ (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - tenDV      <string>  : Lọc theo tên dịch vụ (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - trangThai  <int>     : Lọc theo trạng thái dịch vụ (tùy chọn)
+                             1 = Đang áp dụng | 0 = Ngừng cung cấp
+                             Bỏ trống → trả về tất cả
+    - page       <int>     : Số trang hiện tại (mặc định: 1)
+    - pageSize   <int>     : Số bản ghi mỗi trang (mặc định: 10)
+
+    Ví dụ Request:
+    GET api/DichVuCLS                             → Tất cả dịch vụ, trang 1
+    GET api/DichVuCLS?trangThai=1                  → Chỉ dịch vụ đang áp dụng
+    GET api/DichVuCLS?maDV=DV&page=1&pageSize=10
+    GET api/DichVuCLS?tenDV=siêu âm&trangThai=1
+
+16.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":       <int>,            // Số thứ tự (tính theo trang hiện tại)
+                "maDV":      <string>,         // Mã dịch vụ (từ bảng DichVuYTe)
+                "tenDV":     <string>,         // Tên dịch vụ (từ bảng DichVuYTe)
+                "giaTien":   <decimal(18,2)>,  // Giá tiền dịch vụ, đơn vị: đồng (VNĐ)
+                "trangThai": <bool>            // true = Đang áp dụng | false = Ngừng cung cấp
+            }
+        ],
+        "total":      <int>,  // Tổng số bản ghi sau khi lọc
+        "page":       <int>,  // Trang hiện tại
+        "pageSize":   <int>,  // Số bản ghi mỗi trang
+        "totalPages": <int>   // Tổng số trang
+    }
+
+16.6 Xử lý lỗi
+    16.6.1 Giá trị trangThai không hợp lệ (không phải 0 hoặc 1)
+           → HTTP 400 Bad Request
+           → Thông báo: "Giá trị trạng thái không hợp lệ. Chỉ chấp nhận: 0 | 1"
+
+    16.6.2 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
+           → HTTP 400 Bad Request
+           → Thông báo: "Giá trị phân trang không hợp lệ"
+
+    16.6.3 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 Unauthorized
+           → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    16.6.4 Tài khoản không có quyền truy cập
+           → HTTP 403 Forbidden
+           → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    16.6.5 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 Internal Server Error
+           → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+17. Thêm dịch vụ y tế CLS
+================================================================
+17.1 Tên API
+    POST api/DichVuCLS
+
+17.2 Mô tả
+    Admin thêm mới một dịch vụ CLS vào danh mục dịch vụ y tế.
+
+17.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+17.4 Input (Header + Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body:
+    - maDV       <string>         : Mã dịch vụ CLS            — BẮT BUỘC (VD: DV001, DV002)
+    - tenDV      <string>         : Tên dịch vụ kỹ thuật y tế — BẮT BUỘC (VD: Siêu âm ổ bụng tổng quát)
+    - giaTien    <decimal(18,2)>  : Giá tiền dịch vụ y tế CLS — BẮT BUỘC (VD: 150000)
+    - trangThai  <bool>           : Trạng thái dịch vụ         — Tùy chọn
+                                    true = Đang áp dụng (mặc định) | false = Ngừng cung cấp
+
+    Ví dụ Request Body:
+    {
+        "maDV":      "DV001",
+        "tenDV":     "Siêu âm ổ bụng tổng quát",
+        "giaTien":   150000,
+        "trangThai": true
+    }
+
+17.5 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm dịch vụ cận lâm sàng & xét nghiệm thành công",
+        "data": {
+            "maDV":      <string>,
+            "tenDV":     <string>,
+            "giaTien":   <decimal(18,2)>,
+            "trangThai": <bool>
+        }
+    }
+
+17.6 Ràng buộc
+    17.6.1 Các trường bắt buộc: maDV, tenDV, giaTien
+
+    17.6.2 Mã dịch vụ CLS (maDV)
+           - Không được để trống
+           - Không được chứa khoảng trắng
+           - Không được trùng với mã DV đã tồn tại trong bảng DichVuYTe
+           - Độ dài tối đa 5 ký tự 
+           - Không chứa ký tự đặc biệt (@, !, #, $, %, ...)
+           * Server tự động chuyển về chữ HOA trước khi lưu
+
+    17.6.3 Tên dịch vụ kỹ thuật y tế CLS (tenDV)
+           - Không được để trống
+           - Không được trùng với tên dịch vụ đã tồn tại trong bảng DichVuYTe
+           - Độ dài tối đa 100 ký tự 
+
+    17.6.4 Giá niêm yết (giaTien)
+           - Không được để trống
+           - Phải là kiểu số thực (decimal), không được là chuỗi ký tự
+           - Giá trị phải >= 0 (chấp nhận dịch vụ miễn phí = 0)
+           - Không được vượt quá giới hạn kiểu DECIMAL(18, 2) của SQL Server
+
+    17.6.5 Trạng thái dịch vụ (trangThai)
+           - Kiểu boolean: true hoặc false
+           - Nếu không truyền → mặc định là true (Đang áp dụng)
+           * Chỉ các dịch vụ có trangThai = true mới hiển thị khi bác sĩ
+             chỉ định CLS cho bệnh nhân
+
+17.7 Xử lý lỗi
+    17.7.1 Không nhập mã dịch vụ CLS
+           → HTTP 400 | Thông báo: "Vui lòng nhập mã dịch vụ CLS"
+
+    17.7.2 Không nhập tên dịch vụ kỹ thuật y tế CLS
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên dịch vụ kỹ thuật y tế (CLS)"
+
+    17.7.3 Mã dịch vụ CLS chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mã dịch vụ CLS không được chứa khoảng trắng. Vui lòng nhập lại"
+
+    17.7.4 Mã dịch vụ CLS vượt quá 5 ký tự
+           → HTTP 400 | Thông báo: "Mã dịch vụ CLS không được vượt quá 5 ký tự. Vui lòng nhập lại"
+
+    17.7.5 Mã dịch vụ CLS chứa ký tự đặc biệt
+           → HTTP 400 | Thông báo: "Mã dịch vụ CLS không được chứa ký tự đặc biệt. Vui lòng nhập lại"
+
+    17.7.6 Mã dịch vụ CLS đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Mã dịch vụ CLS đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
+
+    17.7.7 Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    17.7.8 Tên dịch vụ kỹ thuật y tế CLS vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên dịch vụ kỹ thuật y tế CLS không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    17.7.9 Không nhập giá niêm yết dịch vụ CLS
+           → HTTP 400 | Thông báo: "Vui lòng nhập giá niêm yết dịch vụ"
+
+    17.7.10 Giá niêm yết dịch vụ CLS không phải kiểu số hợp lệ
+            → HTTP 400 | Thông báo: "Giá niêm yết dịch vụ CLS phải là một số hợp lệ. Vui lòng nhập lại"
+
+    17.7.11 Giá niêm yết dịch vụ CLS là số âm
+            → HTTP 400 | Thông báo: "Giá niêm yết dịch vụ CLS phải là một số dương >= 0. Vui lòng nhập lại"
+
+    17.7.12 Token không hợp lệ hoặc hết hạn
+            → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    17.7.13 Tài khoản không có quyền Admin
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    17.7.14 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+18. Sửa dịch vụ y tế CLS
+================================================================
+18.1 Tên API
+    PUT api/DichVuCLS/{maDV}
+
+18.2 Mô tả
+    Admin cập nhật thông tin một dịch vụ CLS đã tồn tại trong hệ thống.
+    Lưu ý: Không cho phép thay đổi maDV vì đây là khóa chính (PRIMARY KEY)
+    và được tham chiếu bởi bảng ChiTietCanLamSang — thay đổi sẽ ảnh hưởng
+    đến toàn bộ lịch sử chỉ định CLS đã ghi nhận.
+
+18.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+18.4 Input (URL Parameter + Header + Request Body — JSON)
+    URL Parameter:
+    - maDV      <string>  : Mã dịch vụ CLS cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body (JSON):
+    - tenDV      <string>        : Tên dịch vụ CLS mới        — BẮT BUỘC
+    - giaTien    <decimal(18,2)> : Giá niêm yết dịch vụ mới   — BẮT BUỘC
+    - trangThai  <bool>          : Trạng thái dịch vụ CLS      — BẮT BUỘC
+
+    Ví dụ Request:
+    PUT api/DichVuCLS/DV001
+    {
+        "tenDV":     "X-Quang ngực thẳng kỹ thuật số (đã cập nhật)",
+        "giaTien":   200000,
+        "trangThai": true
+    }
+
+18.5 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật dịch vụ y tế CLS thành công",
+        "data": {
+            "maDV":      <string>,
+            "tenDV":     <string>,
+            "giaTien":   <decimal(18,2)>,
+            "trangThai": <bool>
+        }
+    }
+
+18.6 Ràng buộc
+    18.6.1 Trường được phép cập nhật: tenDV, giaTien, trangThai
+           (maDV là khóa chính — không được phép thay đổi, server bỏ qua
+           nếu client gửi maDV trong body)
+
+    18.6.2 Dịch vụ y tế CLS cần cập nhật phải tồn tại trong hệ thống
+           (maDV trên URL phải khớp với bản ghi trong bảng DichVuYTe)
+
+    18.6.3 Tên dịch vụ kỹ thuật y tế CLS (tenDV)
+           - Không được để trống
+           - Không được trùng với tên dịch vụ đã tồn tại trong bảng DichVuYTe
+             (ngoại trừ chính bản ghi đang cập nhật)
+           - Độ dài tối đa 255 ký tự
+
+    18.6.4 Giá niêm yết (giaTien)
+           - Không được để trống
+           - Phải là kiểu số thực (decimal), không được là chuỗi ký tự
+           - Giá trị phải >= 0
+           - Không được vượt quá giới hạn kiểu DECIMAL(18, 2) của SQL Server
+
+    18.6.5 Trạng thái dịch vụ (trangThai)
+           - Kiểu boolean: true hoặc false
+           - true  = Đang áp dụng → hiển thị khi bác sĩ chỉ định CLS
+           - false = Ngừng cung cấp → ẩn khỏi danh sách chỉ định CLS
+           * Đây là cách "xóa mềm" được khuyến nghị thay vì xóa cứng
+             khi dịch vụ đã có lịch sử sử dụng
+
+18.7 Xử lý lỗi
+    18.7.1 maDV trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy dịch vụ y tế CLS cần cập nhật"
+
+    18.7.2 Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    18.7.3 Tên dịch vụ kỹ thuật y tế CLS vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên dịch vụ kỹ thuật y tế CLS không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    18.7.4 Không nhập tên dịch vụ kỹ thuật y tế CLS
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên dịch vụ kỹ thuật y tế (CLS)"
+
+    18.7.5 Giá niêm yết dịch vụ CLS không phải kiểu số hợp lệ
+           → HTTP 400 | Thông báo: "Giá niêm yết dịch vụ CLS phải là một số hợp lệ. Vui lòng nhập lại"
+
+    18.7.6 Giá niêm yết dịch vụ CLS là số âm
+           → HTTP 400 | Thông báo: "Giá niêm yết dịch vụ CLS phải là một số dương >= 0. Vui lòng nhập lại"
+
+    18.7.7 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    18.7.8 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    18.7.9 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+19. Xóa dịch vụ y tế CLS
+================================================================
+19.1 Tên API
+    DELETE api/DichVuCLS/{maDV}
+
+19.2 Mô tả
+    Admin xóa một dịch vụ y tế CLS khỏi danh mục hệ thống. Áp dụng
+    chiến lược xóa thông minh dựa trên dữ liệu liên quan:
+
+    - Nếu dịch vụ CHƯA có dữ liệu liên quan (chưa có phiếu chỉ định
+      CLS nào sử dụng maDV này trong bảng ChiTietCanLamSang):
+      → Xóa cứng (Hard Delete): xóa bản ghi khỏi bảng DichVuYTe
+
+    - Nếu dịch vụ ĐÃ có dữ liệu liên quan (đã có ChiTietCanLamSang
+      tham chiếu đến maDV này):
+      → KHÔNG xóa cứng (tránh lỗi FK Constraint và mất lịch sử CLS)
+      → Trả về HTTP 409 kèm gợi ý chuyển sang trạng thái "Ngừng cung cấp"
+
+19.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+19.4 Input (URL Parameter + Header)
+    URL Parameter:
+    - maDV      <string>  : Mã dịch vụ y tế CLS cần xóa — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    DELETE api/DichVuCLS/DV001
+
+19.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Kiểm tra maDV tồn tại trong bảng DichVuYTe
+    B3: Kiểm tra maDV có đang được tham chiếu trong bảng ChiTietCanLamSang không
+    B4a: Nếu KHÔNG có dữ liệu liên quan
+         → Xóa bản ghi trong bảng DichVuYTe
+         → Trả về HTTP 200 thành công
+    B4b: Nếu CÓ dữ liệu liên quan
+         → KHÔNG xóa
+         → Trả về HTTP 409 kèm gợi ý chuyển trangThai = false
+
+19.6 Output (khi xóa thành công — Hard Delete) — HTTP 200 OK
+    {
+        "message": "Xóa dịch vụ y tế CLS thành công",
+        "data": {
+            "maDV":      <string>,
+            "tenDV":     <string>,
+            "giaTien":   <decimal(18,2)>,
+            "trangThai": <bool>
+        }
+    }
+
+19.7 Output (khi không thể xóa — có dữ liệu liên quan) — HTTP 409 Conflict
+    {
+        "message": "Không thể xóa dịch vụ này vì đã có phiếu chỉ định cận lâm sàng sử dụng dịch vụ này",
+        "suggestion": "Bạn có thể chuyển dịch vụ sang trạng thái 'Ngừng cung cấp' thay thế. Sử dụng API cập nhật với trangThai = false",
+        "suggestedAction": "PUT api/DichVuCLS/{maDV}  với  trangThai: false"
+    }
+
+19.8 Ràng buộc
+    19.8.1 Mã dịch vụ cần xóa phải tồn tại trong hệ thống
+
+    19.8.2 Không được xóa cứng nếu maDV đang được tham chiếu trong bảng
+           ChiTietCanLamSang (đã có ít nhất một phiếu chỉ định CLS sử dụng
+           dịch vụ này)
+           → Lý do: ràng buộc khóa ngoại (FOREIGN KEY) sẽ vi phạm toàn vẹn
+             dữ liệu, đồng thời xóa sẽ làm mất thông tin lịch sử chỉ định CLS
+
+19.9 Xử lý lỗi
+    19.9.1 maDV trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy dịch vụ y tế CLS cần xóa"
+
+    19.9.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    19.9.3 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    19.9.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể xóa dữ liệu từ máy chủ. Xin hãy thử lại"
