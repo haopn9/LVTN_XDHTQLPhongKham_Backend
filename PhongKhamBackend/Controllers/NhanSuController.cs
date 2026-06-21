@@ -386,6 +386,16 @@ public class NhanSuController : ControllerBase
             if (request.Password.Contains(' '))
                 return BadRequest(new { message = "Mật khẩu đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!" });
 
+            // Chuyên môn phải tồn tại trong Danh mục khoa (ChuyenMon = TenKhoa)
+            DanhMucKhoa? khoaTheoChuyenMon = null;
+            if (!string.IsNullOrWhiteSpace(request.ChuyenMon))
+            {
+                khoaTheoChuyenMon = await _context.DanhMucKhoas
+                    .FirstOrDefaultAsync(k => k.TenKhoa == request.ChuyenMon.Trim());
+                if (khoaTheoChuyenMon == null)
+                    return BadRequest(new { message = "Chuyên môn không hợp lệ. Vui lòng chọn chuyên môn từ danh mục khoa!" });
+            }
+
             // RoleID không hợp lệ
             int[] validRoles = { 1, 2, 3, 4, 5 };
             if (!validRoles.Contains(request.RoleID))
@@ -413,7 +423,8 @@ public class NhanSuController : ControllerBase
                 HoTen     = request.HoTen,
                 Sdt       = request.Sdt,
                 Email     = request.Email,
-                ChuyenMon = string.IsNullOrWhiteSpace(request.ChuyenMon) ? null : request.ChuyenMon
+                ChuyenMon = khoaTheoChuyenMon?.TenKhoa,   // ChuyenMon = TenKhoa từ DanhMucKhoa
+                MaKhoa    = khoaTheoChuyenMon?.MaKhoa     // Tự động gán MaKhoa tương ứng
             };
 
             _context.NhanViens.Add(newNhanVien);
@@ -427,11 +438,13 @@ public class NhanSuController : ControllerBase
                 message = "Thêm nhân viên thành công",
                 data = new
                 {
-                    maNV     = newNhanVien.MaNv,
-                    hoTen    = newNhanVien.HoTen,
-                    username = newUser.Username,
-                    roleName = role?.RoleName ?? "",
-                    isActive = newUser.IsActive
+                    maNV      = newNhanVien.MaNv,
+                    hoTen     = newNhanVien.HoTen,
+                    chuyenMon = newNhanVien.ChuyenMon,
+                    maKhoa    = newNhanVien.MaKhoa,
+                    username  = newUser.Username,
+                    roleName  = role?.RoleName ?? "",
+                    isActive  = newUser.IsActive
                 }
             });
         }
@@ -507,6 +520,16 @@ public class NhanSuController : ControllerBase
             if (!string.IsNullOrEmpty(request.Password) && request.Password.Contains(' '))
                 return BadRequest(new { message = "Mật khẩu đăng nhập không được chứa khoảng trắng. Vui lòng nhập lại!" });
 
+            // Chuyên môn phải tồn tại trong Danh mục khoa (ChuyenMon = TenKhoa)
+            DanhMucKhoa? khoaTheoChuyenMon = null;
+            if (!string.IsNullOrWhiteSpace(request.ChuyenMon))
+            {
+                khoaTheoChuyenMon = await _context.DanhMucKhoas
+                    .FirstOrDefaultAsync(k => k.TenKhoa == request.ChuyenMon.Trim());
+                if (khoaTheoChuyenMon == null)
+                    return BadRequest(new { message = "Chuyên môn không hợp lệ. Vui lòng chọn chuyên môn từ danh mục khoa!" });
+            }
+
             // roleID không hợp lệ
             int[] validRoles = { 1, 2, 3, 4, 5 };
             if (!validRoles.Contains(request.RoleID))
@@ -518,7 +541,8 @@ public class NhanSuController : ControllerBase
             nhanVien.HoTen     = request.HoTen;
             nhanVien.Sdt       = request.Sdt;
             nhanVien.Email     = request.Email;
-            nhanVien.ChuyenMon = string.IsNullOrWhiteSpace(request.ChuyenMon) ? null : request.ChuyenMon;
+            nhanVien.ChuyenMon = khoaTheoChuyenMon?.TenKhoa;   // ChuyenMon = TenKhoa từ DanhMucKhoa
+            nhanVien.MaKhoa    = khoaTheoChuyenMon?.MaKhoa;    // Tự động gán MaKhoa tương ứng
 
             // Cập nhật bảng Users — Email đồng bộ làm Username
             nhanVien.User!.Username = request.Email;
@@ -541,11 +565,13 @@ public class NhanSuController : ControllerBase
                 message = "Cập nhật thông tin nhân viên thành công",
                 data = new
                 {
-                    maNV     = nhanVien.MaNv,
-                    hoTen    = nhanVien.HoTen,
-                    username = nhanVien.User.Username,
-                    roleName = role?.RoleName ?? "",
-                    isActive = nhanVien.User.IsActive
+                    maNV      = nhanVien.MaNv,
+                    hoTen     = nhanVien.HoTen,
+                    chuyenMon = nhanVien.ChuyenMon,
+                    maKhoa    = nhanVien.MaKhoa,
+                    username  = nhanVien.User.Username,
+                    roleName  = role?.RoleName ?? "",
+                    isActive  = nhanVien.User.IsActive
                 }
             });
         }
