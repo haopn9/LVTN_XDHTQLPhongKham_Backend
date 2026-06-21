@@ -1973,3 +1973,405 @@ GHI CHÚ CHUNG CHO CONTROLLER
 
     19.9.4 Hệ thống không kết nối được API hoặc Database
            → HTTP 500 | Thông báo: "Không thể xóa dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+     Controller : KhoaController.cs
+     Base Route  : api/Khoa
+     Phân quyền : Admin
+================================================================
+20. Lấy danh sách khoa 
+================================================================
+20.1 Tên API
+    GET api/Khoa
+
+20.2 Mô tả
+    Lấy danh sách khoa chuyên môn từ bảng DanhMucKhoa, có hỗ trợ
+    lọc theo mã/tên khoa và phân trang.
+
+20.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin mới được gọi API này
+
+20.4 Input (Query Parameters)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Query Parameters (tùy chọn):
+    - maKhoa     <string> : Lọc theo mã khoa (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - tenKhoa    <string> : Lọc theo tên khoa (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - page       <int>    : Số trang hiện tại (mặc định: 1)
+    - pageSize   <int>    : Số bản ghi mỗi trang (mặc định: 10)
+
+    Ví dụ Request:
+    GET api/Khoa                              → Tất cả khoa, trang 1
+    GET api/Khoa?maKhoa=KHOA&page=1&pageSize=10
+    GET api/Khoa?tenKhoa=Tim mạch
+
+20.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Áp dụng bộ lọc maKhoa, tenKhoa (nếu có) lên bảng DanhMucKhoa
+    B3: Đếm tổng số bản ghi sau lọc (total)
+    B4: JOIN với bảng NhanVien để đếm số bác sĩ đang hoạt động
+        (IsActive = 1) theo từng MaKhoa
+    B5: Phân trang và trả về kết quả
+
+20.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":          <int>,    // Số thứ tự (tính theo trang hiện tại)
+                "maKhoa":       <string>, // Mã khoa (từ bảng DanhMucKhoa)
+                "tenKhoa":      <string>, // Tên khoa (từ bảng DanhMucKhoa)
+                "soLuongBacSi": <int>     // Số bác sĩ đang hoạt động thuộc khoa
+            }
+        ],
+        "total":      <int>,  // Tổng số bản ghi sau khi lọc
+        "page":       <int>,  // Trang hiện tại
+        "pageSize":   <int>,  // Số bản ghi mỗi trang
+        "totalPages": <int>   // Tổng số trang
+    }
+
+20.7 Xử lý lỗi
+
+    20.7.1 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
+           → HTTP 400 Bad Request
+           → Thông báo: "Giá trị phân trang không hợp lệ"
+
+    20.7.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 Unauthorized
+           → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    20.7.3 Tài khoản không có quyền truy cập
+           → HTTP 403 Forbidden
+           → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    20.7.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 Internal Server Error
+           → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+21. Lấy danh sách bác sĩ thuộc 1 khoa chuyên môn
+================================================================
+21.1 Tên API
+    GET api/Khoa/{maKhoa}/BacSi
+
+21.2 Mô tả
+    Lấy danh sách bác sĩ (Role = BacSi) thuộc một khoa chuyên môn
+    cụ thể, tra cứu qua cột MaKhoa trong bảng NhanVien.
+
+21.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin mới được gọi API này
+
+21.4 Input
+    URL Parameter:
+    - maKhoa  <string> : Mã khoa cần tra cứu — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    GET api/Khoa/KHOA02/BacSi
+
+21.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Kiểm tra maKhoa tồn tại trong bảng DanhMucKhoa
+        → Không tồn tại: HTTP 404
+    B3: JOIN NhanVien → Users → Roles
+        WHERE NhanVien.MaKhoa = {maKhoa} AND Roles.RoleName = 'BacSi'
+    B4: Trả về danh sách
+
+21.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "maKhoa":  <string>, // Mã khoa
+        "tenKhoa": <string>, // Tên khoa
+        "data": [
+            {
+                "stt":      <int>,    // Số thứ tự
+                "maNV":     <string>, // Mã nhân viên (từ bảng NhanVien)
+                "hoTen":    <string>, // Họ tên bác sĩ (từ bảng NhanVien)
+                "isActive": <bool>    // Trạng thái tài khoản (từ bảng Users)
+            }
+        ]
+    }
+
+21.7 Xử lý lỗi
+
+    21.7.1 maKhoa trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy khoa chuyên môn"
+
+    21.7.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 Unauthorized
+           → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    21.7.3 Tài khoản không có quyền truy cập
+           → HTTP 403 Forbidden
+           → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    21.7.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 Internal Server Error
+           → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+22. Thêm khoa chuyên môn
+================================================================
+22.1 Tên API
+    POST api/Khoa
+
+22.2 Mô tả
+    Admin thêm mới một khoa chuyên môn vào bảng DanhMucKhoa.
+
+22.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+22.4 Input (Header + Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body:
+    - maKhoa   <string> : Mã Khoa  — BẮT BUỘC (VD: KHOA01, KHOA02)
+    - tenKhoa  <string> : Tên Khoa — BẮT BUỘC (VD: Nội tổng quát)
+
+    Ví dụ Request Body:
+    {
+        "maKhoa":  "KHOA03",
+        "tenKhoa": "Nhi Khoa"
+    }
+
+22.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Validate các trường bắt buộc (maKhoa, tenKhoa)
+    B3: Kiểm tra maKhoa trùng trong bảng DanhMucKhoa
+        → Trùng: HTTP 409
+    B4: Kiểm tra tenKhoa trùng trong bảng DanhMucKhoa
+        → Trùng: HTTP 409
+    B5: Tự động chuyển maKhoa về chữ HOA
+    B6: INSERT vào bảng DanhMucKhoa
+    B7: Trả về HTTP 201 kèm bản ghi vừa tạo
+
+22.6 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm mới khoa chuyên môn thành công",
+        "data": {
+            "maKhoa":  <string>,
+            "tenKhoa": <string>
+        }
+    }
+
+22.7 Ràng buộc
+    22.7.1 Các trường bắt buộc: maKhoa, tenKhoa
+
+    22.7.2 Mã khoa (maKhoa)
+           - Không được để trống
+           - Không được chứa khoảng trắng
+           - Không được trùng với mã khoa đã tồn tại trong bảng DanhMucKhoa
+           - Độ dài tối đa  10 ký tự 
+           - Không chứa ký tự đặc biệt (@, !, #, $, %, ...)
+           * Server tự động chuyển về chữ HOA trước khi lưu
+
+    22.7.3 Tên khoa (tenKhoa)
+           - Không được để trống
+           - Không được trùng với TenKhoa đã tồn tại trong bảng DanhMucKhoa
+             (DB đã có UNIQUE constraint trên cột TenKhoa)
+           - Độ dài tối đa 100 ký tự
+
+22.8 Xử lý lỗi
+    22.8.1 Không nhập mã khoa
+           → HTTP 400 | Thông báo: "Vui lòng nhập mã khoa chuyên môn"
+
+    22.8.2 Không nhập tên khoa
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên khoa chuyên môn"
+
+    22.8.3 Mã khoa chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mã khoa chuyên môn không được chứa khoảng trắng. Vui lòng nhập lại"
+
+    22.8.4 Mã khoa vượt quá 10 ký tự
+           → HTTP 400 | Thông báo: "Mã khoa chuyên môn không được vượt quá 10 ký tự. Vui lòng nhập lại"
+
+    22.8.5 Mã khoa chứa ký tự đặc biệt
+           → HTTP 400 | Thông báo: "Mã khoa chuyên môn không được chứa ký tự đặc biệt. Vui lòng nhập lại"
+
+    22.8.6 Mã khoa đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Mã khoa chuyên môn đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
+
+    22.8.7 Tên khoa đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên khoa chuyên môn đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    22.8.8 Tên khoa vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên khoa chuyên môn không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    22.8.9 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    22.8.10 Tài khoản không có quyền Admin
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    22.8.11 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+23. Sửa thông tin khoa chuyên môn
+================================================================
+23.1 Tên API
+    PUT api/Khoa/{maKhoa}
+
+23.2 Mô tả
+    Admin cập nhật tên của một khoa chuyên môn đã tồn tại trong
+    bảng DanhMucKhoa. Chỉ cho phép sửa tenKhoa, không cho sửa
+    maKhoa vì đây là PK và là FK trong bảng NhanVien.
+
+23.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+23.4 Input (URL Parameter + Header + Request Body — JSON)
+    URL Parameter:
+    - maKhoa  <string> : Mã khoa cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body (JSON):
+    - tenKhoa  <string> : Tên khoa mới — BẮT BUỘC
+
+    Ví dụ Request:
+    PUT api/Khoa/KHOA01
+    {
+        "tenKhoa": "Ngoại tổng quát (đã cập nhật)"
+    }
+
+23.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Kiểm tra maKhoa tồn tại trong bảng DanhMucKhoa
+        → Không tồn tại: HTTP 404
+    B3: Validate tenKhoa (không trống, không vượt 100 ký tự)
+    B4: Kiểm tra tenKhoa trùng với bản ghi KHÁC trong DanhMucKhoa
+        → Trùng: HTTP 409
+    B5: UPDATE DanhMucKhoa SET TenKhoa = {tenKhoa} WHERE MaKhoa = {maKhoa}
+    B6: Đếm soLuongBacSi hiện tại của khoa
+    B7: Trả về HTTP 200 kèm bản ghi đã cập nhật
+
+23.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật thông tin khoa chuyên môn thành công",
+        "data": {
+            "maKhoa":       <string>,
+            "tenKhoa":      <string>,
+            "soLuongBacSi": <int>
+        }
+    }
+
+23.7 Ràng buộc
+    23.7.1 Trường được phép cập nhật: chỉ tenKhoa
+           (maKhoa là PK/FK, không được phép thay đổi)
+
+    23.7.2 Khoa cần cập nhật phải tồn tại trong bảng DanhMucKhoa
+
+    23.7.3 Tên khoa (tenKhoa)
+           - Không được để trống
+           - Không được trùng với TenKhoa đã tồn tại trong bảng DanhMucKhoa
+             (ngoại trừ chính bản ghi đang cập nhật)
+           - Độ dài tối đa 100 ký tự
+
+23.8 Xử lý lỗi
+    23.8.1 maKhoa trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy khoa chuyên môn cần cập nhật"
+
+    23.8.2 Tên khoa đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên khoa chuyên môn đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    23.8.3 Tên khoa vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên khoa chuyên môn không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    23.8.4 Không nhập tên khoa
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên khoa chuyên môn"
+
+    23.8.5 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    23.8.6 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    23.8.7 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+24. Xóa Khoa chuyên môn
+================================================================
+24.1 Tên API
+    DELETE api/Khoa/{maKhoa}
+
+24.2 Mô tả
+    Admin xóa một khoa chuyên môn khỏi bảng DanhMucKhoa. Áp dụng
+    chiến lược xóa thông minh dựa trên dữ liệu liên quan:
+
+    - Nếu khoa CHƯA có nhân viên nào tham chiếu (NhanVien.MaKhoa chưa
+      có bản ghi nào trỏ đến maKhoa này):
+      → Xóa cứng (Hard Delete): xóa bản ghi khỏi DanhMucKhoa
+
+    - Nếu khoa ĐÃ có ít nhất 1 nhân viên tham chiếu:
+      → KHÔNG xóa (tránh lỗi FK Constraint)
+      → Trả về HTTP 409 kèm thông báo
+
+24.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin mới được gọi API này
+
+24.4 Input (URL Parameter + Header)
+    URL Parameter:
+    - maKhoa  <string> : Mã khoa cần xóa — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    DELETE api/Khoa/KHOA01
+
+24.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin
+    B2: Kiểm tra maKhoa tồn tại trong bảng DanhMucKhoa
+        → Không tồn tại: HTTP 404
+    B3: Kiểm tra có bản ghi nào trong NhanVien.MaKhoa = {maKhoa} không
+    B4a: Nếu KHÔNG có nhân viên tham chiếu
+         → DELETE FROM DanhMucKhoa WHERE MaKhoa = {maKhoa}
+         → Trả về HTTP 200 thành công
+    B4b: Nếu CÓ nhân viên đang tham chiếu
+         → KHÔNG xóa
+         → Trả về HTTP 409 kèm thông báo
+
+24.6 Output (khi xóa thành công — Hard Delete) — HTTP 200 OK
+    {
+        "message": "Xóa khoa chuyên môn thành công",
+        "data": {
+            "maKhoa":  <string>,
+            "tenKhoa": <string>
+        }
+    }
+
+24.7 Output (khi không thể xóa — có nhân viên tham chiếu) — HTTP 409 Conflict
+    {
+        "message": "Khoa vẫn còn bác sĩ trực thuộc. Không thể xóa khoa này"
+    }
+
+24.8 Ràng buộc
+    24.8.1 Mã khoa cần xóa phải tồn tại trong bảng DanhMucKhoa
+
+    24.8.2 Không được xóa cứng nếu MaKhoa đang được tham chiếu trong
+           bảng NhanVien (đã có ít nhất một nhân viên thuộc khoa này)
+           → Lý do: ràng buộc khóa ngoại (FOREIGN KEY) sẽ vi phạm toàn
+             vẹn dữ liệu khi xóa bản ghi cha còn bản ghi con tham chiếu
+
+24.9 Xử lý lỗi
+    24.9.1 maKhoa trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy khoa chuyên môn cần xóa"
+
+    24.9.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    24.9.3 Tài khoản không có quyền Admin
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    24.9.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể xóa dữ liệu từ máy chủ. Xin hãy thử lại"

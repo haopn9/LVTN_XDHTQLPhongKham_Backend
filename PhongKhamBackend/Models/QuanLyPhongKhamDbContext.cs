@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,6 +22,8 @@ public partial class QuanLyPhongKhamDbContext : DbContext
     public virtual DbSet<ChiTietDonThuoc> ChiTietDonThuocs { get; set; }
 
     public virtual DbSet<DanhMucIcd> DanhMucIcds { get; set; }
+
+    public virtual DbSet<DanhMucKhoa> DanhMucKhoas { get; set; }
 
     public virtual DbSet<DanhMucThuoc> DanhMucThuocs { get; set; }
 
@@ -48,15 +50,8 @@ public partial class QuanLyPhongKhamDbContext : DbContext
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-    {
-        // Connection string được inject từ Program.cs qua AddDbContext
-        // Fallback này chỉ dùng khi chạy EF CLI tools (scaffold, migrations...)
-        if (!optionsBuilder.IsConfigured)
-        {
-            optionsBuilder.UseSqlServer("Server=.\\SQLEXPRESS;Database=QuanLyPhongKham_DB;Trusted_Connection=True;TrustServerCertificate=True;");
-        }
-    }
-
+#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+        => optionsBuilder.UseSqlServer("Server=.\\SQLEXPRESS;Database=QuanLyPhongKham_DB;Trusted_Connection=True;TrustServerCertificate=True;");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -142,6 +137,20 @@ public partial class QuanLyPhongKhamDbContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("MaICD");
             entity.Property(e => e.TenBenh).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<DanhMucKhoa>(entity =>
+        {
+            entity.HasKey(e => e.MaKhoa).HasName("PK__DanhMucK__65390405B2747EE5");
+
+            entity.ToTable("DanhMucKhoa");
+
+            entity.HasIndex(e => e.TenKhoa, "UQ__DanhMucK__AAD361584913661F").IsUnique();
+
+            entity.Property(e => e.MaKhoa)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.TenKhoa).HasMaxLength(100);
         });
 
         modelBuilder.Entity<DanhMucThuoc>(entity =>
@@ -323,11 +332,18 @@ public partial class QuanLyPhongKhamDbContext : DbContext
                 .HasMaxLength(100)
                 .IsUnicode(false);
             entity.Property(e => e.HoTen).HasMaxLength(100);
+            entity.Property(e => e.MaKhoa)
+                .HasMaxLength(20)
+                .IsUnicode(false);
             entity.Property(e => e.Sdt)
                 .HasMaxLength(15)
                 .IsUnicode(false)
                 .HasColumnName("SDT");
             entity.Property(e => e.UserId).HasColumnName("UserID");
+
+            entity.HasOne(d => d.MaKhoaNavigation).WithMany(p => p.NhanViens)
+                .HasForeignKey(d => d.MaKhoa)
+                .HasConstraintName("FK__NhanVien__MaKhoa__2A164134");
 
             entity.HasOne(d => d.User).WithOne(p => p.NhanVien)
                 .HasForeignKey<NhanVien>(d => d.UserId)

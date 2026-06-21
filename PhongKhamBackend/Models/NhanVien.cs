@@ -17,7 +17,11 @@ public partial class NhanVien
 
     public string? Email { get; set; }
 
+    public string? MaKhoa { get; set; }
+
     public virtual ICollection<HoaDon> HoaDons { get; set; } = new List<HoaDon>();
+
+    public virtual DanhMucKhoa? MaKhoaNavigation { get; set; }
 
     public virtual ICollection<PhieuKham> PhieuKhamMaBacSiNavigations { get; set; } = new List<PhieuKham>();
 
