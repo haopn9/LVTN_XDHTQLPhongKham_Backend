@@ -28,7 +28,7 @@
               "RelativeDocumentMoniker": "PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
               "ToolTip": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
               "RelativeToolTip": "PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
-              "ViewState": "AgIAACYAAAAAAAAAAAAswAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAACgAAAAAAAAAAAAswAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-06-12T08:14:04.124Z",
               "EditorCaption": ""
@@ -43,8 +43,7 @@
               "RelativeToolTip": "PhongKhamBackend\\Program.cs",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABEAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-12T07:31:11.757Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-12T07:31:11.757Z"
             }
           ]
         }

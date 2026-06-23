@@ -164,6 +164,7 @@ public partial class QuanLyPhongKhamDbContext : DbContext
                 .IsUnicode(false);
             entity.Property(e => e.DonViTinh).HasMaxLength(50);
             entity.Property(e => e.HoatChat).HasMaxLength(255);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.TenThuoc).HasMaxLength(255);
         });
 

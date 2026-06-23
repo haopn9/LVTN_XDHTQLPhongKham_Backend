@@ -2375,3 +2375,384 @@ GHI CHÚ CHUNG CHO CONTROLLER
 
     24.9.4 Hệ thống không kết nối được API hoặc Database
            → HTTP 500 | Thông báo: "Không thể xóa dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+     Controller : ThuocController.cs
+     Base Route  : api/Thuoc
+     Phân quyền : Admin , BacSi (Bác sĩ),LeTan (Lễ Tân), QuanLyKhoThuoc (Quản lý kho thuốc) , ThuNgan (Thu Ngân)
+================================================================
+25. Lấy danh sách danh mục thuốc 
+================================================================
+25.1 Tên API
+    GET api/Thuoc
+
+25.2 Mô tả
+    Lấy danh sách danh mục thuốc từ bảng DanhMucThuoc, có hỗ trợ
+    lọc theo mã thuốc / tên thuốc / hoạt chất chính / đơn vị tính và phân trang.
+    Kết quả trả về phụ thuộc vào Role của tài khoản:
+    - Admin & QuanLyKhoThuoc : thấy tất cả thuốc (cả đang hoạt động lẫn đã tắt)
+    - BacSi, LeTan, ThuNgan  : chỉ thấy thuốc đang hoạt động (isActive = true)
+
+25.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin, BacSi, LeTan, ThuNgan, QuanLyKhoThuoc mới được gọi API này
+
+25.4 Input (Query Parameters)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Query Parameters (tùy chọn):
+    - maThuoc     <string> : Lọc theo mã thuốc (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - tenThuoc    <string> : Lọc theo tên thuốc (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - hoatChat    <string> : Lọc theo hoạt chất chính (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - donViTinh   <string> : Lọc theo đơn vị tính của thuốc ({Tất cả},{Viên},{Vỉ},{Hộp},{Chai},{Gói},{Ống},{Tuýp})
+    - page        <int>    : Số trang hiện tại (mặc định: 1)
+    - pageSize    <int>    : Số bản ghi mỗi trang (mặc định: 10)
+
+    Ví dụ Request:
+    GET api/Thuoc                                        → Danh sách thuốc theo quyền, trang 1
+    GET api/Thuoc?maThuoc=TH001&page=1&pageSize=10
+    GET api/Thuoc?tenThuoc=Panadol Extra
+    GET api/Thuoc?hoatChat=Paracetamol
+    GET api/Thuoc?donViTinh=Vỉ
+
+25.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền (Admin, BacSi, LeTan, ThuNgan, QuanLyKhoThuoc)
+    B2: Kiểm tra Role của tài khoản đang gọi API:
+        - Nếu Role = Admin hoặc QuanLyKhoThuoc
+          → Lấy tất cả bản ghi trong DanhMucThuoc (không lọc isActive)
+        - Nếu Role = BacSi, LeTan, ThuNgan
+          → Chỉ lấy các bản ghi có isActive = true
+    B3: Áp dụng bộ lọc maThuoc, tenThuoc, hoatChat, donViTinh
+    B4: Đếm tổng số bản ghi sau lọc (total)
+    B5: Phân trang và trả về kết quả
+
+25.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":        <int>,     // Số thứ tự (tính theo trang hiện tại)
+                "maThuoc":    <string>,  // Mã thuốc (từ bảng DanhMucThuoc)
+                "tenThuoc":   <string>,  // Tên thuốc (từ bảng DanhMucThuoc)
+                "hoatChat":   <string>,  // Hoạt chất chính (từ bảng DanhMucThuoc)
+                "donViTinh":  <string>,  // Đơn vị tính của thuốc (từ bảng DanhMucThuoc)
+                "isActive":   <bool>     // Trạng thái hoạt động (chỉ trả về với Role Admin & QuanLyKhoThuoc)
+            }
+        ],
+        "total":      <int>,  // Tổng số bản ghi sau khi lọc
+        "page":       <int>,  // Trang hiện tại
+        "pageSize":   <int>,  // Số bản ghi mỗi trang
+        "totalPages": <int>   // Tổng số trang
+    }
+
+25.7 Xử lý lỗi
+
+    25.7.1 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
+           → HTTP 400 Bad Request
+           → Thông báo: "Giá trị phân trang không hợp lệ"
+
+    25.7.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 Unauthorized
+           → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    25.7.3 Tài khoản không có quyền truy cập
+           → HTTP 403 Forbidden
+           → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    25.7.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 Internal Server Error
+           → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+26. Thêm danh mục thuốc
+================================================================
+26.1 Tên API
+    POST api/Thuoc
+
+26.2 Mô tả
+    Admin & quản lý kho thuốc thêm mới một danh mục thuốc vào bảng DanhMucThuoc.
+
+26.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin, QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+26.4 Input (Header + Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body:
+    - maThuoc   <string> : Mã thuốc  — BẮT BUỘC (VD: TH001, TH002)
+    - tenThuoc  <string> : Tên thuốc — BẮT BUỘC (VD: Paracetamol 500mg)
+    - hoatChat  <string> : Hoạt chất chính có trong thuốc (VD: Paracetamol + Chlorpheniramine)
+    - donViTinh <string> : Đơn vị tính của thuốc — BẮT BUỘC (VD: Viên, Vỉ, Hộp, ...)
+
+    Ví dụ Request Body:
+    {
+        "maThuoc":   "TH001",
+        "tenThuoc":  "Paracetamol 500mg",
+        "hoatChat":  "Paracetamol + Chlorpheniramine",
+        "donViTinh": "Vỉ"
+    }
+
+26.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Validate các trường bắt buộc (maThuoc, tenThuoc, donViTinh)
+    B3: Kiểm tra maThuoc trùng trong bảng DanhMucThuoc
+        → Trùng: HTTP 409
+    B4: Kiểm tra tenThuoc trùng trong bảng DanhMucThuoc
+        → Trùng: HTTP 409
+    B5: Tự động chuyển maThuoc về chữ HOA
+    B6: INSERT vào bảng DanhMucThuoc với isActive = true
+    B7: Trả về HTTP 201 kèm bản ghi vừa tạo
+
+26.6 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm mới danh mục thuốc thành công",
+        "data": {
+            "maThuoc":   <string>,
+            "tenThuoc":  <string>,
+            "hoatChat":  <string>,
+            "donViTinh": <string>
+        }
+    }
+
+26.7 Ràng buộc
+    26.7.1 Các trường bắt buộc: maThuoc, tenThuoc, donViTinh
+
+    26.7.2 Mã thuốc (maThuoc)
+           - Không được để trống
+           - Không được chứa khoảng trắng
+           - Không được trùng với mã thuốc đã tồn tại trong bảng DanhMucThuoc
+           - Độ dài tối đa 10 ký tự
+           - Không chứa ký tự đặc biệt (@, !, #, $, %, ...)
+           * Server tự động chuyển về chữ HOA trước khi lưu
+
+    26.7.3 Tên thuốc (tenThuoc)
+           - Không được để trống
+           - Không được trùng với tenThuoc đã tồn tại trong bảng DanhMucThuoc
+           - Độ dài tối đa 100 ký tự
+
+    26.7.4 Hoạt chất chính (hoatChat)
+           - Độ dài tối đa 255 ký tự
+
+    26.7.5 Đơn vị tính (donViTinh)
+           - Không được để trống
+           - Giá trị hợp lệ: {Viên},{Vỉ},{Hộp},{Chai},{Gói},{Ống},{Tuýp}
+
+26.8 Xử lý lỗi
+    26.8.1 Không nhập mã thuốc
+           → HTTP 400 | Thông báo: "Vui lòng nhập mã thuốc"
+
+    26.8.2 Không nhập tên thuốc
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên thuốc"
+
+    26.8.3 Không nhập đơn vị tính
+           → HTTP 400 | Thông báo: "Vui lòng chọn đơn vị tính"
+
+    26.8.4 Mã thuốc chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mã thuốc không được chứa khoảng trắng. Vui lòng nhập lại"
+
+    26.8.5 Mã thuốc vượt quá 10 ký tự
+           → HTTP 400 | Thông báo: "Mã thuốc không được vượt quá 10 ký tự. Vui lòng nhập lại"
+
+    26.8.6 Mã thuốc chứa ký tự đặc biệt
+           → HTTP 400 | Thông báo: "Mã thuốc không được chứa ký tự đặc biệt. Vui lòng nhập lại"
+
+    26.8.7 Mã thuốc đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Mã thuốc đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
+
+    26.8.8 Tên thuốc đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên thuốc đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    26.8.9 Tên thuốc vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên thuốc không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    26.8.10 Hoạt chất chính vượt quá 255 ký tự
+            → HTTP 400 | Thông báo: "Hoạt chất chính của thuốc không được vượt quá 255 ký tự. Vui lòng nhập lại"
+
+    26.8.11 Token không hợp lệ hoặc hết hạn
+            → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    26.8.12 Tài khoản không có quyền truy cập
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    26.8.13 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+27. Sửa thông tin danh mục thuốc
+================================================================
+27.1 Tên API
+    PUT api/Thuoc/{maThuoc}
+
+27.2 Mô tả
+    Admin & quản lý kho thuốc cập nhật tên thuốc, hoạt chất chính, đơn vị tính của một danh mục thuốc đã tồn tại trong
+    bảng DanhMucThuoc. Chỉ cho phép sửa tenThuoc, hoatChat, donViTinh — không cho sửa
+    maThuoc vì đây là PK.
+
+27.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+27.4 Input (URL Parameter + Header + Request Body — JSON)
+    URL Parameter:
+    - maThuoc  <string> : Mã thuốc cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body (JSON):
+    - tenThuoc  <string> : Tên thuốc mới — BẮT BUỘC
+    - hoatChat  <string> : Hoạt chất chính của thuốc
+    - donViTinh <string> : Đơn vị tính của thuốc — BẮT BUỘC
+
+    Ví dụ Request:
+    PUT api/Thuoc/TH001
+    {
+        "tenThuoc":  "Amoxicillin 500mg",
+        "hoatChat":  "Amoxicillin trihydrate",
+        "donViTinh": "Hộp"
+    }
+
+27.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Kiểm tra maThuoc tồn tại trong bảng DanhMucThuoc
+        → Không tồn tại: HTTP 404
+    B3: Validate tenThuoc (không trống, không vượt 100 ký tự)
+    B4: Kiểm tra tenThuoc trùng với bản ghi KHÁC trong DanhMucThuoc
+        → Trùng: HTTP 409
+    B5: Validate hoatChat (không vượt 255 ký tự)
+    B6: Validate donViTinh (không trống)
+    B7: UPDATE DanhMucThuoc SET TenThuoc = {tenThuoc}, HoatChat = {hoatChat}, DonViTinh = {donViTinh} WHERE MaThuoc = {maThuoc}
+    B8: Trả về HTTP 200 kèm bản ghi đã cập nhật
+
+27.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật thông tin danh mục thuốc thành công",
+        "data": {
+            "maThuoc":   <string>,
+            "tenThuoc":  <string>,
+            "hoatChat":  <string>,
+            "donViTinh": <string>
+        }
+    }
+
+27.7 Ràng buộc
+    27.7.1 Trường được phép cập nhật: chỉ tenThuoc, hoatChat, donViTinh
+           (maThuoc là PK/FK, không được phép thay đổi)
+
+    27.7.2 Danh mục thuốc cần cập nhật phải tồn tại trong bảng DanhMucThuoc
+
+    27.7.3 Tên thuốc (tenThuoc)
+           - Không được để trống
+           - Không được trùng với tenThuoc đã tồn tại trong bảng DanhMucThuoc
+           - Độ dài tối đa 100 ký tự
+
+    27.7.4 Hoạt chất chính (hoatChat)
+           - Độ dài tối đa 255 ký tự
+
+    27.7.5 Đơn vị tính (donViTinh)
+           - Không được để trống
+           - Giá trị hợp lệ: {Viên},{Vỉ},{Hộp},{Chai},{Gói},{Ống},{Tuýp}
+
+27.8 Xử lý lỗi
+    27.8.1 maThuoc trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy danh mục thuốc cần cập nhật"
+
+    27.8.2 Tên thuốc đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên thuốc đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    27.8.3 Không nhập tên thuốc
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên thuốc"
+
+    27.8.4 Tên thuốc vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên thuốc không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    27.8.5 Hoạt chất chính vượt quá 255 ký tự
+           → HTTP 400 | Thông báo: "Hoạt chất chính của thuốc không được vượt quá 255 ký tự. Vui lòng nhập lại"
+
+    27.8.6 Không nhập đơn vị tính
+           → HTTP 400 | Thông báo: "Vui lòng chọn đơn vị tính"
+
+    27.8.7 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    27.8.8 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    27.8.9 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+28. Xóa danh mục thuốc (tắt danh mục thuốc)
+================================================================
+28.1 Tên API
+    DELETE api/Thuoc/{maThuoc}
+
+28.2 Mô tả
+    Admin & quản lý kho thuốc tắt một danh mục thuốc bằng cách cập nhật isActive = false
+    trong bảng DanhMucThuoc. Bản ghi không bị xóa khỏi database để đảm bảo toàn vẹn
+    dữ liệu với các bảng ChiTietDonThuoc và LoThuoc đang tham chiếu FK vào MaThuoc.
+    Thuốc đã tắt sẽ không hiển thị trong danh sách kê đơn của bác sĩ.
+
+28.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+28.4 Input (URL Parameter + Header)
+    URL Parameter:
+    - maThuoc  <string> : Mã thuốc cần tắt — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    DELETE api/Thuoc/TH001
+
+28.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Kiểm tra maThuoc tồn tại trong bảng DanhMucThuoc
+        → Không tồn tại: HTTP 404
+    B3: Kiểm tra isActive hiện tại của bản ghi
+        → isActive = false (đã tắt trước đó): HTTP 400 + thông báo
+    B4: UPDATE DanhMucThuoc SET IsActive = 0 WHERE MaThuoc = {maThuoc}
+    B5: Trả về HTTP 200 kèm bản ghi đã tắt
+
+28.6 Output (khi tắt thành công — Soft Delete) — HTTP 200 OK
+    {
+        "message": "Tắt danh mục thuốc thành công",
+        "data": {
+            "maThuoc":   <string>,
+            "tenThuoc":  <string>,
+            "hoatChat":  <string>,
+            "donViTinh": <string>,
+            "isActive":  false
+        }
+    }
+
+28.7 Ràng buộc
+    28.7.1 Mã thuốc cần tắt phải tồn tại trong bảng DanhMucThuoc
+
+    28.7.2 Chỉ thực hiện Soft Delete (isActive = false), không xóa bản ghi khỏi database
+           để tránh vi phạm FK với ChiTietDonThuoc và LoThuoc, đồng thời bảo toàn
+           lịch sử kê đơn trên các bệnh án cũ
+
+    28.7.3 Không cho phép tắt một thuốc đã ở trạng thái isActive = false
+
+28.8 Xử lý lỗi
+    28.8.1 maThuoc trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy danh mục thuốc cần tắt"
+
+    28.8.2 Danh mục thuốc đã được tắt trước đó
+           → HTTP 400 Bad Request
+           → Thông báo: "Danh mục thuốc này đã được tắt trước đó"
+
+    28.8.3 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    28.8.4 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    28.8.5 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể thực hiện thao tác. Xin hãy thử lại"

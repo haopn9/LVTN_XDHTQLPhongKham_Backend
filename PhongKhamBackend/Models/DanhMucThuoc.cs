@@ -13,6 +13,8 @@ public partial class DanhMucThuoc
 
     public string? DonViTinh { get; set; }
 
+    public bool IsActive { get; set; }
+
     public virtual ICollection<ChiTietDonThuoc> ChiTietDonThuocs { get; set; } = new List<ChiTietDonThuoc>();
 
     public virtual ICollection<LoThuoc> LoThuocs { get; set; } = new List<LoThuoc>();
