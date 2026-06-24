@@ -2756,3 +2756,732 @@ GHI CHÚ CHUNG CHO CONTROLLER
 
     28.8.5 Hệ thống không kết nối được API hoặc Database
            → HTTP 500 | Thông báo: "Không thể thực hiện thao tác. Xin hãy thử lại"
+================================================================
+     Controller : VatTuController.cs
+     Base Route  : api/VatTu
+     Phân quyền : Admin , QuanLyKhoThuoc (Quản lý kho thuốc)
+================================================================
+29. Lấy danh sách danh mục vật tư
+================================================================
+29.1 Tên API
+    GET api/VatTu
+
+29.2 Mô tả
+    Lấy danh sách danh mục vật tư từ bảng DanhMucVatTu, có hỗ trợ
+    lọc theo mã vật tư / tên vật tư / quy cách đóng gói / đơn vị tính và phân trang.
+ 
+29.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin, QuanLyKhoThuoc mới được gọi API này
+
+29.4 Input (Query Parameters)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Query Parameters (tùy chọn):
+    - maVatTu     <string> : Lọc theo mã vật tư (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - tenVatTu    <string> : Lọc theo tên vật tư (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - quyCach    <string> : Lọc theo quy cách đóng gói (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - donViTinh   <string> : Lọc theo đơn vị tính của thuốc ({Tất cả},{Cái},{Cuộn},{Hộp},{Chai},{Gói},{Thùng},{Bộ})
+    - page        <int>    : Số trang hiện tại (mặc định: 1)
+    - pageSize    <int>    : Số bản ghi mỗi trang (mặc định: 10)
+
+    Ví dụ Request:
+    GET api/VatTu                                        → Danh sách vật tư theo quyền, trang 1
+    GET api/VatTu?maVatTu=VT006&page=1&pageSize=10
+    GET api/VatTu?tenVatTu=Khẩu trang y tế 4 lớp
+    GET api/VatTu?quyCach=Hộp 50 cái
+    GET api/VatTu?donViTinh=Cái
+
+29.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền (Admin, QuanLyKhoThuoc)
+    B2: Kiểm tra Role của tài khoản đang gọi API:
+        - Nếu Role = Admin hoặc QuanLyKhoThuoc
+          → Lấy tất cả bản ghi trong DanhMucVatTu (không lọc isActive)
+    B3: Áp dụng bộ lọc maVatTu, tenVatTu, quyCach, donViTinh
+    B4: Đếm tổng số bản ghi sau lọc (total)
+    B5: Phân trang và trả về kết quả
+
+29.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":        <int>,     // Số thứ tự (tính theo trang hiện tại)
+                "maVatTu":    <string>,  // Mã vật tư (từ bảng DanhMucVatTu)
+                "tenVatTu":   <string>,  // Tên vật tư (từ bảng DanhMucVatTu)
+                "quyCach":   <string>,  // quy cách đóng gói (từ bảng DanhMucVatTu)
+                "donViTinh":  <string>,  // Đơn vị tính của vật tư (từ bảng DanhMucVatTu)
+                "isActive":   <bool>     // Trạng thái hoạt động (chỉ trả về với Role Admin & QuanLyKhoThuoc)
+            }
+        ],
+        "total":      <int>,  // Tổng số bản ghi sau khi lọc
+        "page":       <int>,  // Trang hiện tại
+        "pageSize":   <int>,  // Số bản ghi mỗi trang
+        "totalPages": <int>   // Tổng số trang
+    }
+
+29.7 Xử lý lỗi
+
+    29.7.1 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
+           → HTTP 400 Bad Request
+           → Thông báo: "Giá trị phân trang không hợp lệ"
+
+    29.7.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 Unauthorized
+           → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    29.7.3 Tài khoản không có quyền truy cập
+           → HTTP 403 Forbidden
+           → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    29.7.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 Internal Server Error
+           → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+30. Thêm danh mục vật tư
+================================================================
+30.1 Tên API
+    POST api/VatTu
+
+30.2 Mô tả
+    Admin & quản lý kho thuốc thêm mới một danh mục vật tư vào bảng DanhMucVatTu.
+
+30.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin, QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+30.4 Input (Header + Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body:
+    - maVatTu   <string> : Mã vật tư  — BẮT BUỘC (VD: VT001, VT002)
+    - tenVatTu  <string> : Tên vật tư — BẮT BUỘC (VD: Khẩu trang y tế 4 lớp)
+    - quyCach   <string> : Quy cách đóng gói của vật tư (VD: Hộp 50 cái)
+    - donViTinh <string> : Đơn vị tính của vật tư — BẮT BUỘC (VD: Hộp, Cái,...)
+
+    Ví dụ Request Body:
+    {
+        "maVatTu":   "VT002",
+        "tenVatTu":  "Khẩu trang y tế 2 lớp",
+        "quyCach":  "Hộp 20 cái",
+        "donViTinh": "Hộp"
+    }
+
+30.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Validate các trường bắt buộc (maVatTu, tenVatTu, donViTinh)
+    B3: Kiểm tra maVatTu trùng trong bảng DanhMucVatTu
+        → Trùng: HTTP 409
+    B4: Kiểm tra tenVatTu trùng trong bảng DanhMucVatTu
+        → Trùng: HTTP 409
+    B5: Tự động chuyển maVatTu về chữ HOA
+    B6: INSERT vào bảng DanhMucVatTu với isActive = true
+    B7: Trả về HTTP 201 kèm bản ghi vừa tạo
+
+30.6 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm mới danh mục vật tư thành công",
+        "data": {
+            "maVatTu":   <string>,
+            "tenVatTu":  <string>,
+            "quyCach":  <string>,
+            "donViTinh": <string>
+        }
+    }
+
+30.7 Ràng buộc
+    30.7.1 Các trường bắt buộc: maVatTu, tenVatTu, donViTinh
+
+    30.7.2 Mã vật tư (maVatTu)
+           - Không được để trống
+           - Không được chứa khoảng trắng
+           - Không được trùng với mã vật tư đã tồn tại trong bảng DanhMucVatTu
+           - Độ dài tối đa 10 ký tự
+           - Không chứa ký tự đặc biệt (@, !, #, $, %, ...)
+           * Server tự động chuyển về chữ HOA trước khi lưu
+
+    30.7.3 Tên vật tư (tenVatTu)
+           - Không được để trống
+           - Không được trùng với tenVatTu đã tồn tại trong bảng DanhMucVatTu
+           - Độ dài tối đa 100 ký tự
+
+    30.7.4 Quy cách đóng gói (hoatChat)
+           - Độ dài tối đa 100 ký tự
+
+    30.7.5 Đơn vị tính (donViTinh)
+           - Không được để trống
+           - Giá trị hợp lệ: {Cái},{Cuộn},{Hộp},{Chai},{Gói},{Thùng},{Bộ}
+
+30.8 Xử lý lỗi
+    30.8.1 Không nhập mã vật tư
+           → HTTP 400 | Thông báo: "Vui lòng nhập mã vật tư"
+
+    30.8.2 Không nhập tên vật tư
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên vật tư"
+
+    30.8.3 Không nhập đơn vị tính
+           → HTTP 400 | Thông báo: "Vui lòng chọn đơn vị tính"
+
+    30.8.4 Mã vật tư chứa khoảng trắng
+           → HTTP 400 | Thông báo: "Mã vật tư không được chứa khoảng trắng. Vui lòng nhập lại"
+
+    30.8.5 Mã vật tư vượt quá 10 ký tự
+           → HTTP 400 | Thông báo: "Mã vật tư không được vượt quá 10 ký tự. Vui lòng nhập lại"
+
+    30.8.6 Mã vật tư chứa ký tự đặc biệt
+           → HTTP 400 | Thông báo: "Mã vật tư không được chứa ký tự đặc biệt. Vui lòng nhập lại"
+
+    30.8.7 Mã vật tư đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Mã vật tư đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
+
+    30.8.8 Tên vật tư đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên vật tư đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    30.8.9 Tên vật tư vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên vật tư không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    30.8.10 Quy cách đóng gói vượt quá 100 ký tự
+            → HTTP 400 | Thông báo: "Quy cách đóng gói của vật tư không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    30.8.11 Token không hợp lệ hoặc hết hạn
+            → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    30.8.12 Tài khoản không có quyền truy cập
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    30.8.13 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+31. Sửa thông tin danh mục vật tư
+================================================================
+31.1 Tên API
+    PUT api/VatTu/{maVatTu}
+
+31.2 Mô tả
+    Admin & quản lý kho thuốc cập nhật tên vật tư, quy cách đóng gói, đơn vị tính , trạng thái của một danh mục vật tư đã tồn tại trong
+    bảng DanhMucVatTu. Chỉ cho phép sửa tenThuoc, quyCach, donViTinh, isActive — không cho sửa
+    maVatTu vì đây là PK.
+
+31.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+31.4 Input (URL Parameter + Header + Request Body — JSON)
+    URL Parameter:
+    - maVatTu  <string> : Mã vật tư cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body (JSON):
+    - tenVatTu  <string> : Tên vật tư mới — BẮT BUỘC
+    - quyCach  <string> : Quy cách đóng gói của vật tư 
+    - donViTinh <string> : Đơn vị tính của vật tư — BẮT BUỘC
+    - isActive <bool> : trạng thái của vật tư {Hoạt động}, {Ngưng sử dụng}
+
+    Ví dụ Request:
+    PUT api/VatTu/VT001
+    {
+        "tenThuoc":  "găng tay y tế ",
+        "hoatChat":  "Hộp 100 caci1 (size M)",
+        "donViTinh": "Hộp",
+	"isActive": 1
+    }
+
+31.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Kiểm tra maVatTu tồn tại trong bảng DanhMucVatTu
+        → Không tồn tại: HTTP 404
+    B3: Validate tenVatTu (không trống, không vượt 100 ký tự)
+    B4: Kiểm tra tenVatTu trùng với bản ghi KHÁC trong DanhMucVatTu
+        → Trùng: HTTP 409
+    B5: Validate quyCach (không vượt 100 ký tự)
+    B6: Validate donViTinh (không trống)
+    B7: UPDATE DanhMucVatTu SET TenVatTu = {tenVatTu}, QuyCach = {quyCach}, DonViTinh = {donViTinh}, IsActive = {isActive} WHERE MaVatTu = {maVatTu}
+    B8: Trả về HTTP 200 kèm bản ghi đã cập nhật
+
+31.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật thông tin danh mục vật tư thành công",
+        "data": {
+            "maVatTu":   <string>,
+            "tenVatTu":  <string>,
+            "quyCach":  <string>,
+            "donViTinh": <string>,
+	    "isActive" : <bool>
+        }
+    }
+
+31.7 Ràng buộc
+    31.7.1 Trường được phép cập nhật: chỉ tenVatTu, quyCach, donViTinh, isActive
+           (maVatTu là PK/FK, không được phép thay đổi)
+
+    31.7.2 Danh mục vật tư cần cập nhật phải tồn tại trong bảng DanhMucVattu
+
+    31.7.3 Tên vật tư (tenVatTu)
+           - Không được để trống
+           - Không được trùng với tenVatTu đã tồn tại trong bảng DanhMucVatTu
+           - Độ dài tối đa 100 ký tự
+
+    31.7.4 Quy cách đóng gói (hoatChat)
+           - Độ dài tối đa 100 ký tự
+
+    31.7.5 Đơn vị tính (donViTinh)
+           - Không được để trống
+           - Giá trị hợp lệ: {Cái},{Cuộn},{Hộp},{Chai},{Gói},{Thùng},{Bộ}
+    31.7.6 Trạng thái vật tư (isActive)
+	- mặc định trạng thái vật tư : 1: Hoạt động
+        - Giá trị hợp lệ: {1: hoạt động},{0: ngưng sử dụng}
+
+
+31.8 Xử lý lỗi
+    31.8.1 maVatTu trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy danh mục vật tư cần cập nhật"
+
+    31.8.2 Tên vật tư đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên vật tư đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    31.8.3 Không nhập tên vật tư
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên vật tư"
+
+    31.8.4 Tên vật tư vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên vật tư không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    31.8.5 Quy cách đóng gói vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Quy cách của vật tư không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    31.8.6 Không nhập đơn vị tính
+           → HTTP 400 | Thông báo: "Vui lòng chọn đơn vị tính"
+
+    31.8.7 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    31.8.8 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    31.8.9 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+32. Xóa danh mục vật tư (tắt danh mục vật tư)
+================================================================
+32.1 Tên API
+    DELETE api/VatTu/{maVatTu}
+
+32.2 Mô tả
+    Admin & quản lý kho thuốc tắt một danh mục vật tư bằng cách cập nhật isActive = false
+    trong bảng DanhMucVatTu. 
+
+32.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+32.4 Input (URL Parameter + Header)
+    URL Parameter:
+    - maVatTu  <string> : Mã vật tư cần tắt — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    DELETE api/VatTu/VT001
+
+32.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Kiểm tra maVatTu tồn tại trong bảng DanhMucThuoc
+        → Không tồn tại: HTTP 404
+    B3: Kiểm tra isActive hiện tại của bản ghi
+        → isActive = false (đã tắt trước đó): HTTP 400 + thông báo
+    B4: UPDATE DanhMucThuoc SET IsActive = 0 WHERE MaVatTu = {maVatTu}
+    B5: Trả về HTTP 200 kèm bản ghi đã tắt
+
+32.6 Output (khi tắt thành công — Soft Delete) — HTTP 200 OK
+    {
+        "message": "Tắt danh mục vật tư thành công",
+        "data": {
+            "maVatTu":   <string>,
+            "tenVatTu":  <string>,
+            "quyCach":  <string>,
+            "donViTinh": <string>,
+            "isActive":  false
+        }
+    }
+
+32.7 Ràng buộc
+    32.7.1 Mã vật tư cần tắt phải tồn tại trong bảng DanhMucVatTu
+
+    32.7.2 Chỉ thực hiện Soft Delete (isActive = false), không xóa bản ghi khỏi database
+           
+    32.7.3 Không cho phép tắt một thuốc đã ở trạng thái isActive = false
+
+32.8 Xử lý lỗi
+    32.8.1 maVatTu trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy danh mục vật tư cần tắt"
+
+    32.8.2 Danh mục vật tư đã được tắt trước đó
+           → HTTP 400 Bad Request
+           → Thông báo: "Danh mục vật tư này đã được tắt trước đó"
+
+    32.8.3 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    32.8.4 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    32.8.5 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể thực hiện thao tác. Xin hãy thử lại"
+================================================================
+     Controller : NhaCungCapController.cs
+     Base Route  : api/NhaCungCap
+     Phân quyền : Admin , QuanLyKhoThuoc (Quản lý kho thuốc)
+================================================================
+33. Lấy danh sách nhà cung cấp
+================================================================
+33.1 Tên API
+    GET api/NhaCungCap
+
+33.2 Mô tả
+    Lấy danh sách nhà cung cấp từ bảng NhaCungCap, có hỗ trợ phân trang.
+ 
+33.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Tài khoản có Role = Admin, QuanLyKhoThuoc mới được gọi API này
+
+33.4 Input (Query Parameters)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Query Parameters (tùy chọn):
+    - tenNCC      <string> : Lọc theo tên nhà cung cấp (tìm kiếm gần đúng, không phân biệt hoa thường)
+    - page        <int>    : Số trang hiện tại (mặc định: 1)
+    - pageSize    <int>    : Số bản ghi mỗi trang (mặc định: 10)
+
+    Ví dụ Request:
+    GET api/NhaCungCap                                       → Danh sách nhà cung cấp theo quyền, trang 1
+    GET api/NhaCungCap?tenNCC=OPC&page=1&pageSize=10
+
+
+33.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền (Admin, QuanLyKhoThuoc)
+    B2: Kiểm tra Role của tài khoản đang gọi API:
+        - Nếu Role = Admin hoặc QuanLyKhoThuoc
+          → Lấy tất cả bản ghi trong NhaCungCap
+    B3: Áp dụng bộ lọc tenNCC (nếu có)
+    B4: Đếm tổng số bản ghi sau lọc (total)
+    B5: Phân trang và trả về kết quả
+33.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "data": [
+            {
+                "stt":        <int>,     // Số thứ tự (tính theo trang hiện tại)
+                "maNCC":    <string>,  // Mã nhà cung cấp (từ bảng NhaCungCap)
+                "tenNCC":   <string>,  // Tên nhà cung cấp (từ bảng NhaCungCap)
+                "sDT":   <string>,  // số điện thoại nhà cung cấp (từ bảng NhaCungCap)
+ 		"diaChi":   <string>   // Địa chỉ nhà cung cấp (từ bảng NhaCungCap)
+            }
+        ],
+	"total":      <int>,  // Tổng số bản ghi
+        "page":       <int>,  // Trang hiện tại
+        "pageSize":   <int>,  // Số bản ghi mỗi trang
+        "totalPages": <int>   // Tổng số trang
+    }
+
+33.7 Xử lý lỗi
+
+    33.7.1 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
+           → HTTP 400 Bad Request
+           → Thông báo: "Giá trị phân trang không hợp lệ"
+
+    33.7.2 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 Unauthorized
+           → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    33.7.3 Tài khoản không có quyền truy cập
+           → HTTP 403 Forbidden
+           → Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    33.7.4 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 Internal Server Error
+           → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+34. Thêm nhà cung cấp
+================================================================
+34.1 Tên API
+    POST api/NhaCungCap
+
+34.2 Mô tả
+    Admin & quản lý kho thuốc thêm mới một nhà cung cấp vào bảng NhaCungCap.
+
+34.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin, QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+34.4 Input (Header + Request Body — JSON)
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body:
+    - tenNCC  <string> : Tên nhà cung cấp — BẮT BUỘC (VD: Công ty cổ phần dược phẩm OPC)
+    - sDT  <string> : số điện thoại cảu nhà cung cấp (VD: 0282828822)
+    - diaChi <string> : địa chỉ nhà cung cấp — (VD: số 22 , phường Tân Thuận , quận 7 ,TP.HCM)
+
+    Ví dụ Request Body:
+    {
+        "tenNCC":  "Công ty cổ phần dược phẩm OPC",
+        "sDT":  "0282828822",
+        "diaChi": "số 22 , phường Tân Thuận , quận 7 ,TP.HCM"
+    }
+
+34.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Validate các trường bắt buộc (tenNCC)
+    B3: Kiểm tra tenNCC trùng trong bảng NhaCungCap
+        → Trùng: HTTP 409 
+    B4: Validate sDT (nếu có): chuỗi số nguyên dương, không vượt 15 ký tự
+    B5: Validate diaChi (nếu có): không vượt 255 ký tự
+    B6: INSERT vào bảng NhaCungCap (maNCC tự tăng)
+    B7: Trả về HTTP 201 kèm bản ghi vừa tạo
+
+34.6 Output (khi thành công) — HTTP 201 Created
+    {
+        "message": "Thêm mới nhà cung cấp thành công",
+        "data": {
+            "maNCC":   <int>,
+            "tenNCC":  <string>,
+            "sDT":  <string>,
+            "diaChi": <string>
+        }
+    }
+
+34.7 Ràng buộc
+    34.7.1 Các trường bắt buộc: tenNCC
+
+    34.7.2 Mã nhà cung cấp (maNCC)
+           - Kiểu INT IDENTITY, do server tự sinh — client không cần gửi lên
+
+    34.7.3 Tên nhà cung cấp (tenNCC)
+           - Không được để trống
+           - Không được trùng với tenNCC đã tồn tại trong bảng NhaCungCap
+           - Độ dài tối đa 100 ký tự
+
+    34.7.4 Số điện thoại nhà cung cấp (sDT)
+           - Độ dài tối đa 15 ký tự
+	   - bắt buộc là kiểu chuỗi số , không có số âm 
+
+    34.7.5 Địa chỉ nhà cung cấp (diaChi)
+          - Độ dài tối đa 255 ký tự
+           
+
+34.8 Xử lý lỗi
+    
+    34.8.1 Không nhập tên nhà cung cấp
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên nhà cung cấp"
+
+    34.8.2 Tên nhà cung cấp đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên nhà cung cấp đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    34.8.3 Tên nhà cung cấp vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên nhà cung cấp không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    34.8.4 Số điện thoại nhà cung cấp vượt quá 15 ký tự
+           → HTTP 400 | Thông báo: "Số điện thoại nhà cung cấp không được vượt quá 15 ký tự. Vui lòng nhập lại"
+
+    34.8.5 Số điện thoại nhà cung cấp không phải là kiểu số nguyên dương
+	    → HTTP 400 | Thông báo: "Số điện thoại nhà cung cấp phải là kiểu số nguyên dương. Vui lòng nhập lại"
+
+    34.8.6 Địa chỉ nhà cung cấp vượt quá 255 ký tự
+            → HTTP 400 | Thông báo: "Địa chỉ nhà cung cấp không được vượt quá 255 ký tự. Vui lòng nhập lại"
+
+    34.8.7 Token không hợp lệ hoặc hết hạn
+            → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    34.8.8 Tài khoản không có quyền truy cập
+            → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    34.8.9 Hệ thống không kết nối được API hoặc Database
+            → HTTP 500 | Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+35. Sửa thông tin nhà cung cấp 
+================================================================
+35.1 Tên API
+    PUT api/NhaCungCap/{maNCC}
+
+35.2 Mô tả
+    Admin & quản lý kho thuốc cập nhật tên nhà cung cấp, số điện thoại, địa chỉ của một nhà cung cấp đã tồn tại trong
+    bảng NhaCungCap. Chỉ cho phép sửa tenNCC, sDT, diaChi, — không cho sửa
+    maNCC vì đây là PK.
+
+35.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+35.4 Input (URL Parameter + Header + Request Body — JSON)
+    URL Parameter:
+    - maNCC  <int> : Mã nhà cung cấp cần cập nhật — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Body (JSON):
+    - tenNCC  <string> : Tên nhà cung cấp mới — BẮT BUỘC
+    - sDT  <string> : số điện thoại nhà cung cấp
+    - diaChi <string> : đỉa chỉ nhà cung cấp
+ 
+    Ví dụ Request:
+    PUT api/NhaCungCap/1
+    {
+        "tenNCC":  "Công ty cổ phần dược Hậu Giang",
+        "sDT":  "08710101001",
+        "diaChi": "Tp. Hậu Giang"
+	
+    }
+
+35.5 Quy trình xử lý tại server
+    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+    B2: Kiểm tra maNCC tồn tại trong bảng NhaCungCap
+        → Không tồn tại: HTTP 404
+    B3: Validate tenNCC (không trống, không vượt 100 ký tự)
+    B4: Kiểm tra tenNCC trùng với bản ghi KHÁC trong NhaCungCap
+        → Trùng: HTTP 409
+    B5: Validate sDT (không vượt 15 ký tự, phải chuỗi số nguyên dương)
+    B6: Validate diaChi (không vượt 255 ký tự)
+    B7: UPDATE NhaCungCap SET TenNCC = {tenNCC}, SDT = {sDT}, DiaChi = {diaChi} WHERE MaNCC = {maNCC}
+    B8: Trả về HTTP 200 kèm bản ghi đã cập nhật
+
+35.6 Output (khi thành công) — HTTP 200 OK
+    {
+        "message": "Cập nhật thông tin nhà cung cấp thành công",
+        "data": {
+            "maNCC":   <int>,
+            "tenNCC":  <string>,
+            "sDT":  <string>,
+            "diaChi": <string>   
+        }
+    }
+
+35.7 Ràng buộc
+    35.7.1 Trường được phép cập nhật: chỉ tenNCC, sDT, diaChi
+           (maNCC là PK/FK, không được phép thay đổi)
+
+    35.7.2 Nhà cung cấp cần cập nhật phải tồn tại trong bảng NhaCungCap
+
+    35.7.3 Tên nhà cung cấp (tenNCC)
+           - Không được để trống
+           - Không được trùng với tenNCC đã tồn tại trong bảng NhaCungCap
+           - Độ dài tối đa 100 ký tự
+
+    35.7.4 Số điện thoại nhà cung cấp (sDT)
+           - Độ dài tối đa 15 ký tự
+	   - bắt buộc là kiểu chuỗi số , không có số âm 
+
+    35.7.5 Địa chỉ nhà cung cấp (diaChi)
+          - Độ dài tối đa 255 ký tự
+
+
+35.8 Xử lý lỗi
+    35.8.1 maNCC trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy nhà cung cấp cần cập nhật"
+
+    35.8.2 Tên nhà cung cấp đã tồn tại trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Tên nhà cung cấp đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác"
+
+    35.8.3 Không nhập Tên nhà cung cấp
+           → HTTP 400 | Thông báo: "Vui lòng nhập tên nhà cung cấp"
+
+    35.8.4 Tên nhà cung cấp vượt quá 100 ký tự
+           → HTTP 400 | Thông báo: "Tên nhà cung cấp không được vượt quá 100 ký tự. Vui lòng nhập lại"
+
+    35.8.5 Số điện thoại nhà cung cấp vượt quá 15 ký tự
+           → HTTP 400 | Thông báo: "Số điện thoại nhà cung cấp không được vượt quá 15 ký tự. Vui lòng nhập lại"
+
+    35.8.6 Số điện thoại nhà cung cấp không phải là kiểu số nguyên dương
+	    → HTTP 400 | Thông báo: "Số điện thoại nhà cung cấp phải là kiểu số nguyên dương. Vui lòng nhập lại"
+
+    35.8.7 Địa chỉ nhà cung cấp vượt quá 255 ký tự
+            → HTTP 400 | Thông báo: "Địa chỉ nhà cung cấp không được vượt quá 255 ký tự. Vui lòng nhập lại"
+
+    35.8.8 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    35.8.9 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    35.8.10 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại"
+================================================================
+36. Xóa nhà cung cấp
+================================================================
+36.1 Tên API
+    DELETE api/NhaCungCap/{maNCC}
+
+36.2 Mô tả
+    Admin & quản lý kho thuốc xóa một nhà cung cấp trong bảng NhaCungCap. 
+
+36.3 Phân quyền
+    - Yêu cầu token hợp lệ trong Header Authorization
+    - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
+
+36.4 Input (URL Parameter + Header)
+    URL Parameter:
+    - maNCC  <int> : Mã nhà cung cấp cần xóa — BẮT BUỘC
+
+    Header:
+    - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
+
+    Ví dụ Request:
+    DELETE api/NhaCungCap/1
+
+36.5 Quy trình xử lý tại server
+   B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
+   B2: Kiểm tra maNCC tồn tại trong bảng NhaCungCap
+        → Không tồn tại: HTTP 404
+    B3: Kiểm tra bảng LoThuoc có bản ghi nào tham chiếu FK vào maNCC này không
+        → Có tồn tại lô thuốc liên kết: HTTP 409 + thông báo
+          (không cho xóa vì sẽ vi phạm FK constraint)
+    B4: DELETE FROM NhaCungCap WHERE MaNCC = {maNCC}
+    B5: Trả về HTTP 200 kèm thông tin bản ghi đã xóa
+
+36.6 Output (khi tắt thành công — Hard Delete) — HTTP 200 OK
+    {
+        "message": "Xóa nhà cung cấp thành công",
+        "data": {
+            "maNCC":   <int>,
+            "tenNCC":  <string>,
+            "sDT":  <string>,
+            "diaChi": <string>
+        }
+    }
+
+36.7 Ràng buộc
+    36.7.1 Mã nhà cung cấp cần xóa phải tồn tại trong bảng NhaCungCap
+
+    36.7.2 Không được xóa nhà cung cấp đang có lô thuốc liên kết trong bảng LoThuoc
+           
+
+
+36.8 Xử lý lỗi
+    36.8.1 maNCC trên URL không tồn tại trong hệ thống
+           → HTTP 404 Not Found
+           → Thông báo: "Không tìm thấy nhà cung cấp cần xóa"
+
+    36.8.2 Nhà cung cấp đang có lô thuốc liên kết trong hệ thống
+           → HTTP 409 Conflict
+           → Thông báo: "Không thể xóa nhà cung cấp này vì đang có lô thuốc liên kết. Vui lòng kiểm tra lại"
+
+    36.8.3 Token không hợp lệ hoặc hết hạn
+           → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
+
+    36.8.4 Tài khoản không có quyền truy cập
+           → HTTP 403 | Thông báo: "Bạn không có quyền truy cập chức năng này"
+
+    36.8.5 Hệ thống không kết nối được API hoặc Database
+           → HTTP 500 | Thông báo: "Không thể thực hiện thao tác. Xin hãy thử lại"
+

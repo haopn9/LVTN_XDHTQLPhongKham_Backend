@@ -27,6 +27,8 @@ public partial class QuanLyPhongKhamDbContext : DbContext
 
     public virtual DbSet<DanhMucThuoc> DanhMucThuocs { get; set; }
 
+    public virtual DbSet<DanhMucVatTu> DanhMucVatTus { get; set; }
+
     public virtual DbSet<DatLichKham> DatLichKhams { get; set; }
 
     public virtual DbSet<DichVuYte> DichVuYtes { get; set; }
@@ -166,6 +168,21 @@ public partial class QuanLyPhongKhamDbContext : DbContext
             entity.Property(e => e.HoatChat).HasMaxLength(255);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.TenThuoc).HasMaxLength(255);
+        });
+
+        modelBuilder.Entity<DanhMucVatTu>(entity =>
+        {
+            entity.HasKey(e => e.MaVatTu).HasName("PK__DanhMucV__0BD27B6AF7212DAE");
+
+            entity.ToTable("DanhMucVatTu");
+
+            entity.Property(e => e.MaVatTu)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.DonViTinh).HasMaxLength(50);
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.QuyCach).HasMaxLength(255);
+            entity.Property(e => e.TenVatTu).HasMaxLength(255);
         });
 
         modelBuilder.Entity<DatLichKham>(entity =>
