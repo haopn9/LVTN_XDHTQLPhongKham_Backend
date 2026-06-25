@@ -3493,7 +3493,7 @@ GHI CHÚ CHUNG CHO CONTROLLER
 37. Lấy danh sách lô thuốc nhập kho
 ================================================================
 37.1 Tên API
-    api/KhoThuoc
+    GET api/KhoThuoc
 
 37.2 Mô tả
     Lấy danh sách lô thuốc nhập kho từ bảng LoThuoc, có hỗ trợ
@@ -3553,27 +3553,27 @@ GHI CHÚ CHUNG CHO CONTROLLER
     }
 37.7 Rằng buộc
 	37.7.1 Trạng thái của hạn sử dụng bao gồm : {An toàn},{Hạn ngắn (<6 th)},{Đã hết hạn}
-		 TrangThaiHSD = hanSuDung - ngaySanXuat
-		- Nếu TrangThaiHSD >= 6 tháng = 180 ngày => TrangThaiHSD : "An Toàn"
-		- Nếu TrangThaiHSD < 6 tháng = 180 ngày => TrangThaiHSD : "<6 th"
-		- Nếu TrangThaiHSD >= hanSuDung => TrangThaiHSD : "Đã hết hạn"
-		- nếu ngaySanXuat = null thì lấy ngày hiện tại 
+		 TrangThaiHSD được tính dựa trên thời gian còn lại tính từ ngày hiện tại đến hạn sử dụng:
+		 ThoiGianConLai = hanSuDung - TODAY()
+		- Nếu ThoiGianConLai >= 180 ngày  → TrangThaiHSD : "An toàn"
+		- Nếu 0 < ThoiGianConLai < 180 ngày → TrangThaiHSD : "Hạn ngắn (<6 th)"
+		- Nếu ThoiGianConLai <= 0           → TrangThaiHSD : "Đã hết hạn"
 
 37.8 Xử lý lỗi
 
-    38.7.1 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
+   37.8.1 Giá trị page hoặc pageSize không hợp lệ (số âm, bằng 0, không phải số)
            → HTTP 400 Bad Request
            → Thông báo: "Giá trị phân trang không hợp lệ"
 
-    38.7.2 Token không hợp lệ hoặc hết hạn
+    37.8.2 Token không hợp lệ hoặc hết hạn
            → HTTP 401 Unauthorized
            → Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
 
-    38.7.3 Tài khoản không có quyền truy cập
+    37.8.3 Tài khoản không có quyền truy cập
            → HTTP 403 Forbidden
            → Thông báo: "Bạn không có quyền truy cập chức năng này"
 
-    38.7.4 Hệ thống không kết nối được API hoặc Database
+    37.8.4 Hệ thống không kết nối được API hoặc Database
            → HTTP 500 Internal Server Error
            → Thông báo: "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại"
 ================================================================
@@ -3594,56 +3594,61 @@ GHI CHÚ CHUNG CHO CONTROLLER
     - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
 
     Body:
-    - maLo   <string> : Mã lô thuốc  — BẮT BUỘC (VD: L26004, L26005)
-    - tenThuoc  <string> : Tên thuốc — BẮT BUỘC (VD: paracetamol 500mg{viên})
-    - tenNCC   <string> : Tên nhà cung cấp — BẮT BUỘC (VD: Công ty cổ phần dược phẩm OPC)
-    - soLuongNhap <int> : số lượng nhập lô thuốc  — BẮT BUỘC (VD: 100)
-    - soLuongTon <int> : số lượng tồn lô thuốc  — BẮT BUỘC (VD: 100)
-    - giaNhap <demical(18, 2)> : giá nhập của lô thuốc - BẮT BUỘC (VD: 500)
-    - giaBan <demical(18, 2)> : giá bán niêm yết của lô thuốc - BẮT BUỘC (VD: 1000)
-    - ngaySanXuat <date> : ngày sản xuất của lô thuốc (VD: 01/01/2026)
-    - hanSuDung <date> : hạn sử dụng của lô thuốc - BẮT BUỘC (VD: 31/12/2026)
+    - maLo        <string>        : Mã lô thuốc  — BẮT BUỘC (VD: L26004, L26005)
+    - maThuoc     <string>        : Mã thuốc (FK → DanhMucThuoc) — BẮT BUỘC (VD: TH001)
+    - maNCC       <int>           : Mã nhà cung cấp (FK → NhaCungCap) — BẮT BUỘC (VD: 1)
+    - soLuongNhap <int>           : Số lượng nhập lô thuốc — BẮT BUỘC (VD: 100)
+    - soLuongTon  <int>           : Số lượng tồn lô thuốc — BẮT BUỘC (VD: 100)
+    - giaNhap     <decimal(18,2)> : Giá nhập của lô thuốc — BẮT BUỘC (VD: 500)
+    - giaBan      <decimal(18,2)> : Giá bán niêm yết của lô thuốc — BẮT BUỘC (VD: 1000)
+    - ngaySanXuat <date>          : Ngày sản xuất của lô thuốc (VD: 01/01/2026)
+    - hanSuDung   <date>          : Hạn sử dụng của lô thuốc — BẮT BUỘC (VD: 31/12/2026)
 
     Ví dụ Request Body:
     {
-	"maLo":  "L26005",
-    	"tenThuoc":   "paracetamol 500mg{viên}",
-    	"tenNCC":    "Công ty cổ phần dược phẩm OPC",
-    	"soLuongNhap":  "100",
-    	"soLuongTon":  "90",
-    	"giaNhap":  "500",
-    	"giaBan":  "1000",
-    	"ngaySanXuat":  "01/01/2026",
-    	"hanSuDung": "31/12/2026"
+	"maLo":        "L26005",
+    	"maThuoc":     "TH001",
+    	"maNCC":       1,
+    	"soLuongNhap": 100,
+    	"soLuongTon":  90,
+    	"giaNhap":     500,
+    	"giaBan":      1000,
+    	"ngaySanXuat": "01/01/2026",
+    	"hanSuDung":   "31/12/2026"
     }
 
 38.5 Quy trình xử lý tại server
     B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
-    B2: Validate các trường bắt buộc (maLo, tenThuoc, tenNCC, soLuongNhap, soLuongBan, giaNhap, giaBan, hanSuDung)
-    B3: Kiểm tra maLo trùng trong bảng LoThuoc
+    B2: Validate các trường bắt buộc (maLo, maThuoc, maNCC, soLuongNhap, soLuongTon, giaNhap, giaBan, hanSuDung)
+    B3: Trim và tự động chuyển maLo về chữ HOA
+    B4: Kiểm tra maLo trùng trong bảng LoThuoc
         → Trùng: HTTP 409
-    B4: Tự động chuyển maLo về chữ HOA
-    B5: INSERT vào bảng LoThuoc 
-    B6: Trả về HTTP 201 kèm bản ghi vừa tạo
-
+    B5: Kiểm tra maThuoc tồn tại trong bảng DanhMucThuoc
+        → Không tồn tại: HTTP 404
+    B6: Kiểm tra maNCC tồn tại trong bảng NhaCungCap
+        → Không tồn tại: HTTP 404
+    B7: INSERT vào bảng LoThuoc
+    B8: Trả về HTTP 201 kèm bản ghi vừa tạo
 38.6 Output (khi thành công) — HTTP 201 Created
     {
         "message": "Thêm mới lô thuốc nhập kho thành công",
         "data": {
-            "maLo:   <string>,
-            "tenThuoc":  <string>,
-            "tenNCC":  <string>,
-            "soLuongNhap":  "int",
-    	    "soLuongTon":  "int",
-    	    "giaNhap":  "demical(18,2)",
-    	    "giaBan":  "demical(18,2)",
-    	    "ngaySanXuat":  "date",
-    	    "hanSuDung": "date"
+            "maLo":        <string>,
+            "maThuoc":     <string>,
+            "tenThuoc":    <string>,
+            "maNCC":       <int>,
+            "tenNCC":      <string>,
+            "soLuongNhap": <int>,
+    	    "soLuongTon":  <int>,
+    	    "giaNhap":     <decimal(18,2)>,
+    	    "giaBan":      <decimal(18,2)>,
+    	    "ngaySanXuat": <date>,
+    	    "hanSuDung":   <date>
         }
     }
 
 38.7 Ràng buộc
-    38.7.1 Các trường bắt buộc: maLo, tenThuoc, nhaNCC, soluongnhap, soluongton, gianhap, giaban, hanSuDung
+   38.7.1 Các trường bắt buộc: maLo, maThuoc, maNCC, soLuongNhap, soLuongTon, giaNhap, giaBan, hanSuDung
 
     38.7.2 Mã lô thuốc (maLo)
            - Không được để trống
@@ -3651,26 +3656,25 @@ GHI CHÚ CHUNG CHO CONTROLLER
            - Không được trùng với mã lô thuốc đã tồn tại trong bảng LoThuoc
            - Độ dài tối đa 10 ký tự
            - Không chứa ký tự đặc biệt (@, !, #, $, %, ...)
-           * Server tự động chuyển về chữ HOA trước khi lưu
+           * Server tự động trim và chuyển về chữ HOA trước khi kiểm tra trùng và lưu
 
-    38.7.3 Tên thuốc (tenThuoc)
-           - hiện tên thuốc còn được sử dụng & ngưng sử dụng trong table DanhMucThuoc
+    38.7.3 Mã thuốc (maThuoc)
+           - Phải tồn tại trong bảng DanhMucThuoc (bao gồm cả thuốc đang và ngưng sử dụng)
 
-    38.7.4 Tên nhà cung cấp (hoatChat)
-           - hiện tên nhà cung cấp trong table NhaCungCap
+    38.7.4 Mã nhà cung cấp (maNCC)
+           - Phải tồn tại trong bảng NhaCungCap
 
     38.7.5 Số lượng nhập kho & số lượng tồn kho
            - Không được để trống
 	   - Phải là số nguyên dương >= 0
            - Số lượng nhập kho >= số lượng tồn kho
-    38.7.6 Gía nhập dơn vị & giá bán niêm yết
+    38.7.6 Giá nhập đơn vị & giá bán niêm yết
 	   - Không được để trống
 	   - Phải là số dương >= 0
-	   - độ dài là 18 ký tự
+	   - Kiểu decimal(18,2): tối đa 16 chữ số phần nguyên, 2 chữ số thập phân
     38.7.7 Ngày sản xuất & Hạn sử dụng
-	- kiểu "dd/mm/yyyy"
-	- ngày sản xuất <= hạn sử dụng
-
+	- Kiểu "dd/mm/yyyy"
+	- Ngày sản xuất <= hạn sử dụng
 38.8 Xử lý lỗi
     38.8.1 Không nhập mã lô thuốc
            → HTTP 400 | Thông báo: "Vui lòng nhập mã lô thuốc"
@@ -3691,17 +3695,17 @@ GHI CHÚ CHUNG CHO CONTROLLER
            → HTTP 400 | Thông báo: "Vui lòng  nhập hạn sử dụng của lô thuốc"
 
     38.8.7 Mã lô thuốc chứa khoảng trắng
-           → HTTP 400 | Thông báo: "Mã vật tư không được chứa khoảng trắng. Vui lòng nhập lại"
+           → HTTP 400 | Thông báo: "Mã lô thuốc không được chứa khoảng trắng. Vui lòng nhập lại"
 
     38.8.8 Mã lô thuốc vượt quá 10 ký tự
-           → HTTP 400 | Thông báo: "Mã vật tư không được vượt quá 10 ký tự. Vui lòng nhập lại"
+           → HTTP 400 | Thông báo: "Mã lô thuốc không được vượt quá 10 ký tự. Vui lòng nhập lại"
 
     38.8.9 Mã lô thuốc chứa ký tự đặc biệt
-           → HTTP 400 | Thông báo: "Mã vật tư không được chứa ký tự đặc biệt. Vui lòng nhập lại"
+           → HTTP 400 | Thông báo: "Mã lô thuốc không được chứa ký tự đặc biệt. Vui lòng nhập lại"
 
     38.8.10 Mã lô thuốc đã tồn tại trong hệ thống
            → HTTP 409 Conflict
-           → Thông báo: "Mã vật tư đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
+           → Thông báo: "Mã lô thuốc đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác"
 
     38.8.11 Số lượng nhập là 1 số âm
            → HTTP 400 | Thông báo: "Số lượng nhập của lô thuốc phải là 1 số nguyên dương. Vui lòng nhập lại"
@@ -3718,14 +3722,15 @@ GHI CHÚ CHUNG CHO CONTROLLER
     38.8.15 Gía bán niêm yết của lô thuốc là 1 số âm
            → HTTP 400 | Thông báo: " Gía bán niêm yết của lô thuốc phải là 1 số dương. Vui lòng nhập lại"
 
-    38.8.16 Gía nhập về của lô thuốc vượt quá 18 ký tự
-           → HTTP 400 | Thông báo: "Gía nhập về của lô thuốc không được vượt quá 18 ký tự. Vui lòng nhập lại"
+    38.8.16 Giá nhập về của lô thuốc vượt quá giới hạn decimal(18,2)
+           → HTTP 400 | Thông báo: "Giá nhập về của lô thuốc không được vượt quá 16 chữ số phần nguyên. Vui lòng nhập lại"
 
-    38.8.17 Gía bán niêm yết của lô thuốc vượt quá 18 ký tự
-           → HTTP 400 | Thông báo: "Gía bán niêm yết của lô thuốc không được vượt quá 18 ký tự. Vui lòng nhập lại"
+    38.8.17 Giá bán niêm yết của lô thuốc vượt quá giới hạn decimal(18,2)
+           → HTTP 400 | Thông báo: "Giá bán niêm yết của lô thuốc không được vượt quá 16 chữ số phần nguyên. Vui lòng nhập lại"
+
 
     38.8.18 Hạn sử dụng của lô thuốc < ngày sản xuất của lô thuốc
-	 → HTTP 400 | Thông báo: "Hạn sử dụng lớn hơn hoặc bằng ngày sản xuất của lô thuốc. Vui lòng nhập lại"
+	 → HTTP 400 | Thông báo: "Hạn sử dụng phải lớn hơn hoặc bằng ngày sản xuất của lô thuốc. Vui lòng nhập lại"
 
     38.8.19 Token không hợp lệ hoặc hết hạn
             → HTTP 401 | Thông báo: "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại"
@@ -3742,8 +3747,8 @@ GHI CHÚ CHUNG CHO CONTROLLER
     PUT api/KhoThuoc/{maLo}
 
 39.2 Mô tả
-    Admin & quản lý kho thuốc cập nhật thông tin lô thuốc:  tên thuốc, tên nhà cung cấp, số lượng nhập , số lượng tồn kho , giá nhập , giá bán , ngày sản xuất,Hạn sử dụng của một lô thuốc nhập kho đã tồn tại trong
-    bảng LoThuoc. Chỉ cho phép sửa tenThuoc, tenNCC, soluongnhap, soluongton,gianhap,giaban,ngaysanxuat,hansudung — không cho sửa
+    Admin & quản lý kho thuốc cập nhật thông tin lô thuốc: mã thuốc, mã nhà cung cấp, số lượng nhập, số lượng tồn kho, giá nhập, giá bán, ngày sản xuất, hạn sử dụng của một lô thuốc nhập kho đã tồn tại trong
+    bảng LoThuoc. Chỉ cho phép sửa maThuoc, maNCC, soLuongNhap, soLuongTon, giaNhap, giaBan, ngaySanXuat, hanSuDung — không cho sửa
     maLo vì đây là PK.
 
 39.3 Phân quyền
@@ -3758,41 +3763,41 @@ GHI CHÚ CHUNG CHO CONTROLLER
     - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
 
     Body (JSON):
-    - tenThuoc  <string> : Tên thuốc — BẮT BUỘC (VD: paracetamol 500mg{viên})
-    - tenNCC   <string> : Tên nhà cung cấp — BẮT BUỘC (VD: Công ty cổ phần dược phẩm OPC)
-    - soLuongNhap <int> : số lượng nhập lô thuốc  — BẮT BUỘC (VD: 100)
-    - soLuongTon <int> : số lượng tồn lô thuốc  — BẮT BUỘC (VD: 100)
-    - giaNhap <demical(18, 2)> : giá nhập của lô thuốc - BẮT BUỘC (VD: 500)
-    - giaBan <demical(18, 2)> : giá bán niêm yết của lô thuốc - BẮT BUỘC (VD: 1000)
-    - ngaySanXuat <date> : ngày sản xuất của lô thuốc (VD: 01/01/2026)
-    - hanSuDung <date> : hạn sử dụng của lô thuốc - BẮT BUỘC (VD: 31/12/2026)
+    - maThuoc     <string>        : Mã thuốc (FK → DanhMucThuoc) — BẮT BUỘC (VD: TH001)
+    - maNCC       <int>           : Mã nhà cung cấp (FK → NhaCungCap) — BẮT BUỘC (VD: 1)
+    - soLuongNhap <int>           : Số lượng nhập lô thuốc — BẮT BUỘC (VD: 100)
+    - soLuongTon  <int>           : Số lượng tồn lô thuốc — BẮT BUỘC (VD: 100)
+    - giaNhap     <decimal(18,2)> : Giá nhập của lô thuốc — BẮT BUỘC (VD: 500)
+    - giaBan      <decimal(18,2)> : Giá bán niêm yết của lô thuốc — BẮT BUỘC (VD: 1000)
+    - ngaySanXuat <date>          : Ngày sản xuất của lô thuốc (VD: 01/01/2026)
+    - hanSuDung   <date>          : Hạn sử dụng của lô thuốc — BẮT BUỘC (VD: 31/12/2026)
 
 
     Ví dụ Request:
     PUT api/KhoThuoc/L26001
     {
-    	"tenThuoc":   "paracetamol 500mg{viên}",
-    	"tenNCC":    "Công ty cổ phần dược phẩm OPC",
-    	"soLuongNhap":  "100",
-    	"soLuongTon":  "90",
-    	"giaNhap":  "500",
-    	"giaBan":  "1000",
-    	"ngaySanXuat":  "01/01/2026",
-    	"hanSuDung": "31/12/2026"
+    	"maThuoc":     "TH001",
+    	"maNCC":       1,
+    	"soLuongNhap": 100,
+    	"soLuongTon":  90,
+    	"giaNhap":     500,
+    	"giaBan":      1000,
+    	"ngaySanXuat": "01/01/2026",
+    	"hanSuDung":   "31/12/2026"
     }
 
 39.5 Quy trình xử lý tại server
     B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
     B2: Kiểm tra maLo tồn tại trong bảng LoThuoc
         → Không tồn tại: HTTP 404
-    B3: Validate tenThuoc (có data trong table DanhMucThuoc)
-    B4: Validate tenNCC (có data trong table NhaCungCap)
-    B5: Validate soLuongNhap 
+    B3: Validate maThuoc (có tồn tại trong bảng DanhMucThuoc)
+    B4: Validate maNCC (có tồn tại trong bảng NhaCungCap)
+    B5: Validate soLuongNhap
     B6: Validate soLuongTon
     B7: Validate giaNhap
-    B8: Validate giaNhap
+    B8: Validate giaBan
     B9: Validate ngaySanXuat
-    B10:Validate hanSuDung
+    B10: Validate hanSuDung
     B11: UPDATE LoThuoc
     B12: Trả về HTTP 200 kèm bản ghi đã cập nhật
 
@@ -3800,41 +3805,43 @@ GHI CHÚ CHUNG CHO CONTROLLER
     {
         "message": "Cập nhật thông tin lô thuốc thành công",
         "data": {
-            "maLo:   <string>,
-            "tenThuoc":  <string>,
-            "tenNCC":  <string>,
-            "soLuongNhap":  "int",
-    	    "soLuongTon":  "int",
-    	    "giaNhap":  "demical(18,2)",
-    	    "giaBan":  "demical(18,2)",
-    	    "ngaySanXuat":  "date",
-    	    "hanSuDung": "date"
+            "maLo":        <string>,
+            "maThuoc":     <string>,
+            "tenThuoc":    <string>,
+            "maNCC":       <int>,
+            "tenNCC":      <string>,
+            "soLuongNhap": <int>,
+    	    "soLuongTon":  <int>,
+    	    "giaNhap":     <decimal(18,2)>,
+    	    "giaBan":      <decimal(18,2)>,
+    	    "ngaySanXuat": <date>,
+    	    "hanSuDung":   <date>
         }
     }
 
 39.7 Ràng buộc
-    39.7.1 Trường được phép cập nhật: Chỉ cho phép sửa tenThuoc, tenNCC, soluongnhap, soluongton,gianhap,giaban,ngaysanxuat,hansudung
+    39.7.1 Trường được phép cập nhật: Chỉ cho phép sửa maThuoc, maNCC, soLuongNhap, soLuongTon, giaNhap, giaBan, ngaySanXuat, hanSuDung
            (maLo là PK/FK, không được phép thay đổi)
 
     39.7.2 Lô thuốc cần cập nhật phải tồn tại trong bảng LoThuoc
 
-    39.7.3 Tên thuốc (tenThuoc)
-           - hiện tên thuốc còn được sử dụng & ngưng sử dụng trong table DanhMucThuoc
+    39.7.3 Mã thuốc (maThuoc)
+           - Phải tồn tại trong bảng DanhMucThuoc (bao gồm cả thuốc đang và ngưng sử dụng)
 
-    39.7.4 Tên nhà cung cấp (hoatChat)
-           - hiện tên nhà cung cấp trong table NhaCungCap
+    39.7.4 Mã nhà cung cấp (maNCC)
+           - Phải tồn tại trong bảng NhaCungCap
 
     39.7.5 Số lượng nhập kho & số lượng tồn kho
            - Không được để trống
 	   - Phải là số nguyên dương >= 0
            - Số lượng nhập kho >= số lượng tồn kho
-    39.7.6 Gía nhập dơn vị & giá bán niêm yết
+    39.7.6 Giá nhập đơn vị & giá bán niêm yết
 	   - Không được để trống
 	   - Phải là số dương >= 0
-	   - độ dài là 18 ký tự
+	   - Kiểu decimal(18,2): tối đa 16 chữ số phần nguyên, 2 chữ số thập phân
     39.7.7 Ngày sản xuất & Hạn sử dụng
-	- kiểu "dd/mm/yyyy"
-	- ngày sản xuất <= hạn sử dụng
+	- Kiểu "dd/mm/yyyy"
+	- Ngày sản xuất <= hạn sử dụng
 
 
 39.8 Xử lý lỗi
@@ -3873,11 +3880,11 @@ GHI CHÚ CHUNG CHO CONTROLLER
     39.8.11 Gía bán niêm yết của lô thuốc là 1 số âm
            → HTTP 400 | Thông báo: " Gía bán niêm yết của lô thuốc phải là 1 số dương. Vui lòng nhập lại"
 
-    39.8.12 Gía nhập về của lô thuốc vượt quá 18 ký tự
-           → HTTP 400 | Thông báo: "Gía nhập về của lô thuốc không được vượt quá 18 ký tự. Vui lòng nhập lại"
+    39.8.12 Giá nhập về của lô thuốc vượt quá giới hạn decimal(18,2)
+           → HTTP 400 | Thông báo: "Giá nhập về của lô thuốc không được vượt quá 16 chữ số phần nguyên. Vui lòng nhập lại"
 
-    39.8.13 Gía bán niêm yết của lô thuốc vượt quá 18 ký tự
-           → HTTP 400 | Thông báo: "Gía bán niêm yết của lô thuốc không được vượt quá 18 ký tự. Vui lòng nhập lại"
+    39.8.13 Giá bán niêm yết của lô thuốc vượt quá giới hạn decimal(18,2)
+           → HTTP 400 | Thông báo: "Giá bán niêm yết của lô thuốc không được vượt quá 16 chữ số phần nguyên. Vui lòng nhập lại"
 
     39.8.14 Hạn sử dụng của lô thuốc < ngày sản xuất của lô thuốc
 	 → HTTP 400 | Thông báo: "Hạn sử dụng lớn hơn hoặc bằng ngày sản xuất của lô thuốc. Vui lòng nhập lại"
@@ -3904,7 +3911,7 @@ GHI CHÚ CHUNG CHO CONTROLLER
     - Chỉ tài khoản có Role = Admin & QuanLyKhoThuoc (Quản lý kho thuốc) mới được gọi API này
 40.4 Input (URL Parameter + Header)
     URL Parameter:
-    - maLo  <int> : Mã lô thuốc cần xóa — BẮT BUỘC
+    - maLo  <string> : Mã lô thuốc cần xóa — BẮT BUỘC
 
     Header:
     - Authorization  <string> : "Bearer {token}" — BẮT BUỘC
@@ -3915,27 +3922,32 @@ GHI CHÚ CHUNG CHO CONTROLLER
 40.5 Quy trình xử lý tại server
    B1: Xác thực token và quyền Admin & QuanLyKhoThuoc
    B2: Kiểm tra maLo tồn tại trong bảng LoThuoc
-        → Không tồn tại: HTTP 409
+        → Không tồn tại: HTTP 404
     B3: DELETE FROM LoThuoc WHERE MaLo = {maLo}
     B4: Trả về HTTP 200 kèm thông tin bản ghi đã xóa
 40.6 Output (khi tắt thành công — Hard Delete) — HTTP 200 OK
     {
         "message": "Xóa lô thuốc thành công",
         "data": {
-            "maLo:   <string>,
-            "tenThuoc":  <string>,
-            "tenNCC":  <string>,
-            "soLuongNhap":  "int",
-    	    "soLuongTon":  "int",
-    	    "giaNhap":  "demical(18,2)",
-    	    "giaBan":  "demical(18,2)",
-    	    "ngaySanXuat":  "date",
-    	    "hanSuDung": "date"
+            "maLo":        <string>,
+            "maThuoc":     <string>,
+            "tenThuoc":    <string>,
+            "maNCC":       <int>,
+            "tenNCC":      <string>,
+            "soLuongNhap": <int>,
+    	    "soLuongTon":  <int>,
+    	    "giaNhap":     <decimal(18,2)>,
+    	    "giaBan":      <decimal(18,2)>,
+    	    "ngaySanXuat": <date>,
+    	    "hanSuDung":   <date>
         }
     }
 
 40.7 Ràng buộc
-   40.7.1 Mã lô thuốc cần xóa phải tồn tại trong bảng LoThuoc
+  40.7.1 Mã lô thuốc cần xóa phải tồn tại trong bảng LoThuoc
+  40.7.2 Hiện tại LoThuoc không bị tham chiếu trực tiếp bởi bảng khác nên áp dụng Hard Delete.
+          Lưu ý: Nếu sau này bổ sung bảng xuất kho hoặc sử dụng lô thuốc có FK tới LoThuoc,
+          cần chuyển sang Soft Delete (IsActive = 0) để đảm bảo toàn vẹn dữ liệu.
 
 40.8 Xử lý lỗi
     40.8.1 maLo trên URL không tồn tại trong hệ thống
