@@ -70,7 +70,7 @@ public class DichVuYTeCLSController : ControllerBase
             }
 
             // Xây dựng query
-            var query = _context.DichVuYtes.AsQueryable();
+            var query = _context.ChiTietDichVuYtes.AsQueryable();
 
             // Lọc theo mã dịch vụ (tìm kiếm gần đúng, không phân biệt hoa thường)
             if (!string.IsNullOrWhiteSpace(maDV))
@@ -191,20 +191,20 @@ public class DichVuYTeCLSController : ControllerBase
             string maDVUpper = request.MaDV.Trim().ToUpper();
 
             // Mã dịch vụ CLS đã tồn tại trong hệ thống
-            bool maDVExists = await _context.DichVuYtes.AnyAsync(dv => dv.MaDv == maDVUpper);
+            bool maDVExists = await _context.ChiTietDichVuYtes.AnyAsync(dv => dv.MaDv == maDVUpper);
             if (maDVExists)
                 return Conflict(new { message = "Mã dịch vụ CLS đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại mã khác" });
 
             // Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống
             string tenDVTrim = request.TenDV.Trim();
-            bool tenDVExists = await _context.DichVuYtes
+            bool tenDVExists = await _context.ChiTietDichVuYtes
                 .AnyAsync(dv => dv.TenDv.ToLower() == tenDVTrim.ToLower());
             if (tenDVExists)
                 return Conflict(new { message = "Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác" });
 
 
             // TẠO BẢN GHI MỚI TRONG DATABASE
-            var newDichVu = new DichVuYte
+            var newDichVu = new ChiTietDichVuYte
             {
                 MaDv      = maDVUpper,
                 TenDv     = tenDVTrim,
@@ -212,7 +212,7 @@ public class DichVuYTeCLSController : ControllerBase
                 TrangThai = request.TrangThai ?? true  // Mặc định là true (Đang áp dụng) nếu không truyền
             };
 
-            _context.DichVuYtes.Add(newDichVu);
+            _context.ChiTietDichVuYtes.Add(newDichVu);
             await _context.SaveChangesAsync();
 
             return StatusCode(201, new
@@ -251,7 +251,7 @@ public class DichVuYTeCLSController : ControllerBase
         {
             // KIỂM TRA DỊCH VỤ TỒN TẠI
             // maDV trên URL không tồn tại trong hệ thống
-            var dichVu = await _context.DichVuYtes.FindAsync(maDV);
+            var dichVu = await _context.ChiTietDichVuYtes.FindAsync(maDV);
 
             if (dichVu == null)
                 return NotFound(new { message = "Không tìm thấy dịch vụ y tế CLS cần cập nhật" });
@@ -278,7 +278,7 @@ public class DichVuYTeCLSController : ControllerBase
                 return BadRequest(new { message = "Giá niêm yết dịch vụ CLS phải là một số dương >= 0. Vui lòng nhập lại" });
 
             // Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống (ngoại trừ chính bản ghi đang cập nhật)
-            bool tenDVDuplicate = await _context.DichVuYtes
+            bool tenDVDuplicate = await _context.ChiTietDichVuYtes
                 .AnyAsync(dv => dv.TenDv.ToLower() == tenDVTrim.ToLower() && dv.MaDv != maDV);
             if (tenDVDuplicate)
                 return Conflict(new { message = "Tên dịch vụ kỹ thuật y tế CLS đã tồn tại trong hệ thống. Vui lòng kiểm tra & nhập lại tên khác" });
@@ -328,7 +328,7 @@ public class DichVuYTeCLSController : ControllerBase
             // KIỂM TRA DỊCH VỤ TỒN TẠI
 
             // maDV trên URL không tồn tại trong hệ thống
-            var dichVu = await _context.DichVuYtes.FindAsync(maDV);
+            var dichVu = await _context.ChiTietDichVuYtes.FindAsync(maDV);
 
             if (dichVu == null)
                 return NotFound(new { message = "Không tìm thấy dịch vụ y tế CLS cần xóa" });
@@ -336,7 +336,7 @@ public class DichVuYTeCLSController : ControllerBase
             // KIỂM TRA RÀNG BUỘC KHÓA NGOẠI
 
             // Mã dịch vụ đang được sử dụng trong phiếu chỉ định cận lâm sàng
-            bool hasChiTietCLS = await _context.ChiTietCanLamSangs
+            bool hasChiTietCLS = await _context.DichVuYtes
                 .AnyAsync(ct => ct.MaDv == maDV);
 
             if (hasChiTietCLS)
@@ -350,7 +350,7 @@ public class DichVuYTeCLSController : ControllerBase
             }
 
             // XÓA BẢN GHI (Hard Delete)
-            _context.DichVuYtes.Remove(dichVu);
+            _context.ChiTietDichVuYtes.Remove(dichVu);
             await _context.SaveChangesAsync();
 
             return Ok(new

@@ -285,7 +285,7 @@ public class BenhLyICDController : ControllerBase
 
             // Mã ICD đang được sử dụng trong phiếu khám
             bool hasPhieuKham = await _context.PhieuKhams
-                .AnyAsync(pk => pk.MaIcd == maICD);
+                .AnyAsync(pk => pk.MaIcds.Any(icd => icd.MaIcd == maICD));
 
             if (hasPhieuKham)
             {

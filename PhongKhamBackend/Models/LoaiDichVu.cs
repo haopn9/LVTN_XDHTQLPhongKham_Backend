@@ -9,5 +9,5 @@ public partial class LoaiDichVu
 
     public string TenLoai { get; set; } = null!;
 
-    public virtual ICollection<DichVuYte> DichVuYtes { get; set; } = new List<DichVuYte>();
+    public virtual ICollection<ChiTietDichVuYte> ChiTietDichVuYtes { get; set; } = new List<ChiTietDichVuYte>();
 }

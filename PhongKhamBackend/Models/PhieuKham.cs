@@ -9,9 +9,7 @@ public partial class PhieuKham
 
     public string? MaBn { get; set; }
 
-    public string? MaNvTiepDon { get; set; }
-
-    public string? MaBacSi { get; set; }
+    public string? MaNv { get; set; }
 
     public DateTime? NgayKham { get; set; }
 
@@ -25,25 +23,23 @@ public partial class PhieuKham
 
     public double? ChieuCao { get; set; }
 
-    public string? MaIcd { get; set; }
-
     public string? KetLuan { get; set; }
-
-    public int? TrangThaiKham { get; set; }
 
     public string? LyDoKham { get; set; }
 
-    public virtual ICollection<ChiTietCanLamSang> ChiTietCanLamSangs { get; set; } = new List<ChiTietCanLamSang>();
+    public int? TrangThaiKham { get; set; }
+
+    public virtual ICollection<ChiTietVatTuPhieuKham> ChiTietVatTuPhieuKhams { get; set; } = new List<ChiTietVatTuPhieuKham>();
+
+    public virtual ICollection<DichVuYte> DichVuYtes { get; set; } = new List<DichVuYte>();
 
     public virtual ICollection<DonThuoc> DonThuocs { get; set; } = new List<DonThuoc>();
 
     public virtual ICollection<HoaDon> HoaDons { get; set; } = new List<HoaDon>();
 
-    public virtual NhanVien? MaBacSiNavigation { get; set; }
-
     public virtual BenhNhan? MaBnNavigation { get; set; }
 
-    public virtual DanhMucIcd? MaIcdNavigation { get; set; }
+    public virtual NhanVien? MaNvNavigation { get; set; }
 
-    public virtual NhanVien? MaNvTiepDonNavigation { get; set; }
+    public virtual ICollection<DanhMucIcd> MaIcds { get; set; } = new List<DanhMucIcd>();
 }

@@ -613,10 +613,10 @@ public class NhanSuController : ControllerBase
 
             // KIỂM TRA DỮ LIỆU LIÊN QUAN
             bool hasPhieuKham = await _context.PhieuKhams
-                .AnyAsync(pk => pk.MaNvTiepDon == maNV || pk.MaBacSi == maNV);
+                .AnyAsync(pk => pk.MaNv == maNV);
 
             bool hasHoaDon = await _context.HoaDons
-                .AnyAsync(hd => hd.MaNvThuNgan == maNV);
+                .AnyAsync(hd => hd.MaNv == maNV);
 
             // CÓ DỮ LIỆU LIÊN QUAN → KHÔNG XÓA, GỢI Ý TẠM KHÓA
             if (hasPhieuKham || hasHoaDon)

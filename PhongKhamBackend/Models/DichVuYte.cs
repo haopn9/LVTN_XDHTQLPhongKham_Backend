@@ -5,17 +5,17 @@ namespace PhongKhamBackend.Models;
 
 public partial class DichVuYte
 {
-    public string MaDv { get; set; } = null!;
+    public int MaChiTiet { get; set; }
 
-    public int? MaLoaiDv { get; set; }
+    public string? MaPhieu { get; set; }
 
-    public string TenDv { get; set; } = null!;
+    public string? MaDv { get; set; }
 
-    public decimal GiaTien { get; set; }
+    public string? KetQua { get; set; }
 
-    public bool? TrangThai { get; set; }
+    public int? TrangThaiDichVu { get; set; }
 
-    public virtual ICollection<ChiTietCanLamSang> ChiTietCanLamSangs { get; set; } = new List<ChiTietCanLamSang>();
+    public virtual ChiTietDichVuYte? MaDvNavigation { get; set; }
 
-    public virtual LoaiDichVu? MaLoaiDvNavigation { get; set; }
+    public virtual PhieuKham? MaPhieuNavigation { get; set; }
 }

@@ -9,5 +9,5 @@ public partial class DanhMucIcd
 
     public string TenBenh { get; set; } = null!;
 
-    public virtual ICollection<PhieuKham> PhieuKhams { get; set; } = new List<PhieuKham>();
+    public virtual ICollection<PhieuKham> MaPhieus { get; set; } = new List<PhieuKham>();
 }
