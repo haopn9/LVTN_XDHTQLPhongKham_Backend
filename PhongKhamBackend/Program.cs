@@ -111,7 +111,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseCors("AllowFrontend");       // ✅ CORS phải đứng TRƯỚC redirect & auth
+app.UseCors("AllowFrontend");       //  CORS phải đứng TRƯỚC redirect & auth
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
