@@ -20,7 +20,13 @@ public class VatTuController : ControllerBase
         "Chai",
         "Gói",
         "Thùng",
-        "Bộ"
+        "Bộ",
+        "Sợi",
+        "Khay",
+        "Bình",
+        "Bịch",
+        "Xấp"
+
     };
 
     private readonly QuanLyPhongKhamDbContext _context;
@@ -341,7 +347,7 @@ public class VatTuController : ControllerBase
             return BadRequest(new { message = "Quy cách đóng gói của vật tư không được vượt quá 100 ký tự. Vui lòng nhập lại" });
 
         if (!DonViTinhHopLe.Contains(donViTinh.Trim()))
-            return BadRequest(new { message = "Đơn vị tính không hợp lệ. Chỉ chấp nhận: Cái, Cuộn, Hộp, Chai, Gói, Thùng, Bộ" });
+            return BadRequest(new { message = "Đơn vị tính không hợp lệ. Chỉ chấp nhận: Cái, Cuộn, Hộp, Chai, Gói, Thùng, Bộ, Sợi, Khay, Bình, Bịch ,Xấp" });
 
         return null;
     }

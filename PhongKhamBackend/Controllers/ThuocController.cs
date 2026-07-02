@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using PhongKhamBackend.Models;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace PhongKhamBackend.Controllers;
@@ -41,6 +43,9 @@ public class ThuocController : ControllerBase
         public string TenThuoc { get; set; } = string.Empty;
         public string? HoatChat { get; set; }
         public string DonViTinh { get; set; } = string.Empty;
+
+        [JsonConverter(typeof(BoolOrNumberJsonConverter))]
+        public bool IsActive { get; set; } = true;
     }
 
     // ================================================================
@@ -236,6 +241,7 @@ public class ThuocController : ControllerBase
             thuoc.TenThuoc = tenThuocTrim;
             thuoc.HoatChat = hoatChatTrim;
             thuoc.DonViTinh = donViTinhTrim;
+            thuoc.IsActive = request.IsActive;
 
             await _context.SaveChangesAsync();
 
@@ -247,7 +253,8 @@ public class ThuocController : ControllerBase
                     maThuoc = thuoc.MaThuoc,
                     tenThuoc = thuoc.TenThuoc,
                     hoatChat = thuoc.HoatChat,
-                    donViTinh = thuoc.DonViTinh
+                    donViTinh = thuoc.DonViTinh,
+                    isActive = thuoc.IsActive
                 }
             });
         }
@@ -350,5 +357,35 @@ public class ThuocController : ControllerBase
             return BadRequest(new { message = "Đơn vị tính không hợp lệ. Chỉ chấp nhận: Viên, Vỉ, Hộp, Chai, Gói, Ống, Tuýp" });
 
         return null;
+    }
+
+    private class BoolOrNumberJsonConverter : JsonConverter<bool>
+    {
+        public override bool Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.True) return true;
+            if (reader.TokenType == JsonTokenType.False) return false;
+
+            if (reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out int number))
+            {
+                if (number == 1) return true;
+                if (number == 0) return false;
+            }
+
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                string? value = reader.GetString();
+                if (bool.TryParse(value, out bool boolValue)) return boolValue;
+                if (value == "1") return true;
+                if (value == "0") return false;
+            }
+
+            throw new JsonException("Trạng thái thuốc không hợp lệ");
+        }
+
+        public override void Write(Utf8JsonWriter writer, bool value, JsonSerializerOptions options)
+        {
+            writer.WriteBooleanValue(value);
+        }
     }
 }
