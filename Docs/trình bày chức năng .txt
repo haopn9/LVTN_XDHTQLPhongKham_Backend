@@ -852,19 +852,18 @@ GHI CHÚ CHUNG CHO CONTROLLER
 9. TIẾP NHẬN BỆNH NHÂN (TẠO PHIẾU KHÁM)
 ================================================================
 9.1 Tên API
-    POST api/tiep-don
+    POST api/TiepDon
 
 9.2 Mô tả
     Lễ tân hoàn tất form tiếp đón và lưu lại để tạo phiếu khám mới.
     API xử lý hai tình huống:
 
-    Tình huống A — Bệnh nhân CŨ (đã tra cứu thấy maBN):
+    Tình huống A — Bệnh nhân CŨ (đã tra cứu bằng số điện thoai thấy hồ sơ bệnh nhân ):
       → Chỉ tạo bản ghi mới trong bảng PhieuKham, liên kết với maBN
         có sẵn. Không tạo lại bản ghi BenhNhan.
 
     Tình huống B — Bệnh nhân MỚI (chưa có hồ sơ):
-      → Server tạo maBN mới (cấu trúc: BN + yyMMdd + stt 3 chữ số,
-        ví dụ BN260609001) và lưu vào bảng BenhNhan trước.
+      → Server tạo maBN mới tự tăng và lưu vào bảng BenhNhan trước.
       → Sau đó tạo bản ghi PhieuKham liên kết với maBN vừa tạo.
 
     Trong cả hai tình huống, phiếu khám được tạo với
@@ -873,7 +872,7 @@ GHI CHÚ CHUNG CHO CONTROLLER
 9.3 Phân quyền
     - Yêu cầu token hợp lệ trong Header Authorization
     - Role được phép: LeTan, Admin
-    - MaNV_TiepDon được lấy tự động từ token (không cần client truyền)
+    - MaNV được lấy tự động từ token (không cần client truyền)
 
 9.4 Input (Request Body — JSON)
     Header:
@@ -883,17 +882,16 @@ GHI CHÚ CHUNG CHO CONTROLLER
     -- Thông tin bệnh nhân --
     - maBN        <string>  : Mã BN cũ — Truyền nếu là BN cũ, bỏ trống nếu BN mới
     - hoTen       <string>  : Họ và tên bệnh nhân (CHỮ HOA) — BẮT BUỘC
-    - ngaySinh    <string>  : Ngày sinh định dạng YYYY-MM-DD  — BẮT BUỘC
+    - ngaySinh    <string>  : Ngày sinh định dạng DD/MM/YYYY  — BẮT BUỘC
     - gioiTinh    <string>  : "Nam" | "Nữ" | "Khác"          — BẮT BUỘC
     - sdt         <string>  : Số điện thoại 10 chữ số         — BẮT BUỘC
     - diaChi      <string>  : Địa chỉ thường trú              — Tuỳ chọn
     - tienSuBenh  <string>  : Tiền sử bệnh lý                 — Tuỳ chọn
 
     -- Thông tin phiếu khám --
-    - maBacSi     <string>  : Mã bác sĩ chỉ định (từ bảng NhanVien) — Tuỳ chọn
+    - maNV     <string>  : Mã nhân viên có role = BacSi chỉ định (từ bảng NhanVien) — Tuỳ chọn
                               Bỏ trống → hệ thống để null, phân công sau
     - lyDoKham    <string>  : Lý do đến khám / triệu chứng    — BẮT BUỘC
-    - maICD       <string>  : Mã bệnh ICD chẩn đoán ban đầu   — Tuỳ chọn
 
     Ví dụ Request Body (BN mới):
     {
@@ -924,7 +922,7 @@ GHI CHÚ CHUNG CHO CONTROLLER
     }
 
 9.5 Quy trình xử lý tại server
-    B1: Xác thực token, lấy MaNV_TiepDon từ token
+    B1: Xác thực token, lấy MaNV có role = LeTan từ token
     B2: Validate các trường bắt buộc (hoTen, ngaySinh, gioiTinh,
         sdt, lyDoKham)
     B3: Validate định dạng sdt (10 chữ số, bắt đầu bằng 0)
