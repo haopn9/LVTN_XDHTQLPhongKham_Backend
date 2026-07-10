@@ -318,16 +318,19 @@ public class TiepDonController : ControllerBase
                 string maPhieu = $"{prefixPK}{sttPK:D3}";  // VD: PK_260609_001
 
                 // INSERT PHIẾU KHÁM VỚI TrangThaiKham = 0
-                // MaNV trong PhieuKham lưu MaNV lễ tân (từ token)
-                // maNVBacSi chỉ validate, KHÔNG lưu vào PhieuKham ở bước tiếp đón
+                // MaNV = bác sĩ chỉ định nếu lễ tân đã chọn, ngược lại = lễ tân tiếp đón
+                string maNvLuuPhieu = !string.IsNullOrWhiteSpace(request.MaNVBacSi)
+                    ? request.MaNVBacSi.Trim()
+                    : maNvTiepDon;
+
                 var newPhieuKham = new PhieuKham
                 {
                     MaPhieu       = maPhieu,
                     MaBn          = maBN,
-                    MaNv          = maNvTiepDon,       // MaNV = lễ tân từ token
+                    MaNv          = maNvLuuPhieu,      // Ưu tiên MaNV bác sĩ chỉ định, fallback lễ tân
                     NgayKham      = DateTime.Now,
                     LyDoKham      = request.LyDoKham.Trim(),
-                    TrangThaiKham = 0                   // Chờ khám
+                    TrangThaiKham = 0                  // Chờ khám
                 };
 
                 _context.PhieuKhams.Add(newPhieuKham);
@@ -489,20 +492,20 @@ public class TiepDonController : ControllerBase
                 .Take(limit)
                 .Select(pk => new
                 {
-                    maPhieu       = pk.MaPhieu,
-                    maBN          = pk.MaBn,
-                    hoTen         = pk.MaBnNavigation != null ? pk.MaBnNavigation.HoTen : null,
-                    ngaySinh      = pk.MaBnNavigation != null && pk.MaBnNavigation.NgaySinh != null
-                                        ? pk.MaBnNavigation.NgaySinh.Value.ToString("dd/MM/yyyy")
-                                        : null,
-                    gioiTinh      = pk.MaBnNavigation != null ? pk.MaBnNavigation.GioiTinh : null,
-                    sdt           = pk.MaBnNavigation != null ? pk.MaBnNavigation.Sdt : null,
-                    diaChi        = pk.MaBnNavigation != null ? pk.MaBnNavigation.DiaChi : null,
-                    lyDoKham      = pk.LyDoKham,
-                    ngayKham      = pk.NgayKham,
-                    trangThaiKham = pk.TrangThaiKham,
-                    maNV          = pk.MaNv,
-                    tenNhanVien   = pk.MaNvNavigation != null ? pk.MaNvNavigation.HoTen : null
+                    maPhieu           = pk.MaPhieu,
+                    maBN              = pk.MaBn,
+                    hoTen             = pk.MaBnNavigation != null ? pk.MaBnNavigation.HoTen : null,
+                    ngaySinh          = pk.MaBnNavigation != null && pk.MaBnNavigation.NgaySinh != null
+                                            ? pk.MaBnNavigation.NgaySinh.Value.ToString("dd/MM/yyyy")
+                                            : null,
+                    gioiTinh          = pk.MaBnNavigation != null ? pk.MaBnNavigation.GioiTinh : null,
+                    sdt               = pk.MaBnNavigation != null ? pk.MaBnNavigation.Sdt : null,
+                    diaChi            = pk.MaBnNavigation != null ? pk.MaBnNavigation.DiaChi : null,
+                    lyDoKham          = pk.LyDoKham,
+                    ngayKham          = pk.NgayKham,
+                    trangThaiKham     = pk.TrangThaiKham,
+                    maBacSiChiDinh    = pk.MaNv,
+                    tenBacSiChiDinh   = pk.MaNvNavigation != null ? pk.MaNvNavigation.HoTen : null
                 })
                 .ToListAsync();
 
@@ -536,6 +539,41 @@ public class TiepDonController : ControllerBase
     }
 
 
+    // GET api/TiepDon/danh-sach-bac-si
+    // Lấy danh sách bác sĩ (phục vụ lễ tân chọn bác sĩ chỉ định khi tạo phiếu)
+    
+    // Trả về danh sách nhân viên có RoleID = 2 (BacSi) và IsActive = 1.
+    // Chỉ trả maNV + hoTen, không trả thông tin nhạy cảm khác.
+    
+    [HttpGet("danh-sach-bac-si")]
+    [Authorize(Roles = "LeTan,Admin")]
+    public async Task<IActionResult> LayDanhSachBacSi()
+    {
+        try
+        {
+            // SELECT NhanVien JOIN Users WHERE RoleID = 2 (BacSi) AND IsActive = 1
+            // Sắp xếp theo HoTen tăng dần
+            var danhSachBacSi = await _context.NhanViens
+                .Include(nv => nv.User)
+                .Where(nv => nv.User != null && nv.User.RoleId == 2 && nv.User.IsActive == true)
+                .OrderBy(nv => nv.HoTen)
+                .Select(nv => new
+                {
+                    maNV  = nv.MaNv,
+                    hoTen = nv.HoTen
+                })
+                .ToListAsync();
+
+            return Ok(new { data = danhSachBacSi });
+        }
+        catch (Exception)
+        {
+            // Hệ thống không kết nối được API hoặc Database
+            return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
+
     // GET api/TiepDon/{maPhieu}
     // Xem chi tiết hồ sơ bệnh nhân
     
@@ -555,7 +593,7 @@ public class TiepDonController : ControllerBase
             
             var phieuKham = await _context.PhieuKhams
                 .Include(pk => pk.MaBnNavigation)                          // BenhNhan
-                .Include(pk => pk.MaNvNavigation)                          // NhanVien (MaNV dùng chung)
+                .Include(pk => pk.MaNvNavigation)                          // NhanVien (MaNV = bác sĩ chỉ định)
                 .Include(pk => pk.MaIcds)                                  // DanhMucICD (many-to-many)
                 .Include(pk => pk.DichVuYtes)                              // DichVuYTe (chỉ định CLS)
                     .ThenInclude(dv => dv.MaDvNavigation)                  // ChiTietDichVuYTe (catalog)
@@ -588,9 +626,9 @@ public class TiepDonController : ControllerBase
                 diaChi     = phieuKham.MaBnNavigation?.DiaChi,
                 tienSuBenh = phieuKham.MaBnNavigation?.TienSuBenh,
 
-                // --- Nhân viên (từ NhanVien JOIN PhieuKham.MaNV) ---
-                maNV         = phieuKham.MaNv,
-                tenNhanVien  = phieuKham.MaNvNavigation?.HoTen,
+                // --- Bác sĩ chỉ định (từ NhanVien JOIN PhieuKham.MaNV) ---
+                maBacSiChiDinh  = phieuKham.MaNv,
+                tenBacSiChiDinh = phieuKham.MaNvNavigation?.HoTen,
 
                 // --- Sinh hiệu (do bác sĩ cập nhật qua API khám bệnh, có thể null) ---
                 mach     = phieuKham.Mach,
