@@ -14,10 +14,12 @@ namespace PhongKhamBackend.Controllers;
 public class KhamBenhController : ControllerBase
 {
     private readonly QuanLyPhongKhamDbContext _context;
+    private readonly ILogger<KhamBenhController> _logger;
 
-    public KhamBenhController(QuanLyPhongKhamDbContext context)
+    public KhamBenhController(QuanLyPhongKhamDbContext context, ILogger<KhamBenhController> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public class CapNhatKhamBenhRequest
@@ -40,6 +42,12 @@ public class KhamBenhController : ControllerBase
         public string MaThuoc { get; set; } = string.Empty;
         public int? SoLuong { get; set; }
         public string CachDung { get; set; } = string.Empty;
+    }
+
+    public class CapNhatChiDinhClsRequest
+    {
+        public int TrangThaiDichVu { get; set; }
+        public string? KetQua { get; set; }
     }
 
     private class ThongTinDangNhap
@@ -159,8 +167,9 @@ public class KhamBenhController : ControllerBase
                 }
             });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "[LayDanhSachBenhNhanChoKham] Lỗi khi lấy danh sách bệnh nhân");
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
@@ -185,8 +194,9 @@ public class KhamBenhController : ControllerBase
 
             return Ok(new { data = TaoResponsePhieuKham(phieuKham) });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "[XemChiTietPhieuKham] Lỗi khi xem phiếu khám {MaPhieu}", maPhieu);
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
@@ -245,6 +255,7 @@ public class KhamBenhController : ControllerBase
                         .AnyAsync(dv => dv.MaDv == maDv && dv.TrangThai == true);
                     if (!dichVuHopLe)
                     {
+                        _context.ChangeTracker.Clear();
                         await transaction.RollbackAsync();
                         return BadRequest(new { message = "Dịch vụ CLS không tồn tại hoặc đã ngừng cung cấp. Vui lòng kiểm tra lại" });
                     }
@@ -253,6 +264,7 @@ public class KhamBenhController : ControllerBase
                         .AnyAsync(dv => dv.MaPhieu == maPhieu && dv.MaDv == maDv);
                     if (daChiDinh)
                     {
+                        _context.ChangeTracker.Clear();
                         await transaction.RollbackAsync();
                         return Conflict(new { message = "Dịch vụ CLS này đã được chỉ định cho phiếu khám" });
                     }
@@ -275,15 +287,32 @@ public class KhamBenhController : ControllerBase
 
                 if (donThuoc == null)
                 {
-                    donThuoc = new DonThuoc
+                    // Retry tối đa 3 lần để tránh race condition trùng MaDonThuoc
+                    DonThuoc? donThuocMoi = null;
+                    for (int attempt = 1; attempt <= 3; attempt++)
                     {
-                        MaDonThuoc = await TaoMaDonThuocMoiAsync(),
-                        MaPhieu = maPhieu,
-                        NgayKeDon = DateTime.Now,
-                        LoiDan = ChuanHoaChuoi(request.LoiDan)
-                    };
-                    _context.DonThuocs.Add(donThuoc);
-                    await _context.SaveChangesAsync();
+                        try
+                        {
+                            donThuocMoi = new DonThuoc
+                            {
+                                MaDonThuoc = await TaoMaDonThuocMoiAsync(),
+                                MaPhieu = maPhieu,
+                                NgayKeDon = DateTime.Now,
+                                LoiDan = ChuanHoaChuoi(request.LoiDan)
+                            };
+                            _context.DonThuocs.Add(donThuocMoi);
+                            await _context.SaveChangesAsync();
+                            break; // Thành công, thoát vòng lặp
+                        }
+                        catch (DbUpdateException dbEx) when (attempt < 3)
+                        {
+                            // Trùng PRIMARY KEY MaDonThuoc → thử lại với mã mới
+                            _logger.LogWarning(dbEx,
+                                "[TaoMaDonThuoc] Trùng mã lần {Attempt}, thử lại...", attempt);
+                            _context.ChangeTracker.Clear();
+                        }
+                    }
+                    donThuoc = donThuocMoi;
                 }
                 else if (request.LoiDan != null)
                 {
@@ -403,8 +432,65 @@ public class KhamBenhController : ControllerBase
                 data = TaoResponsePhieuKham(phieuSauCapNhat!)
             });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "[CapNhatThongTinKhamBenh] Lỗi khi cập nhật phiếu khám {MaPhieu}", maPhieu);
+            return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
+    // PATCH api/KhamBenh/{maPhieu}/chi-dinh-cls/{maChiTiet}
+    [HttpPatch("{maPhieu}/chi-dinh-cls/{maChiTiet}")]
+    [Authorize(Roles = "BacSi,Admin")]
+    public async Task<IActionResult> CapNhatTrangThaiChiDinhCls(
+        string maPhieu, int maChiTiet,
+        [FromBody] CapNhatChiDinhClsRequest request)
+    {
+        try
+        {
+            if (!new[] { 0, 1 }.Contains(request.TrangThaiDichVu))
+                return BadRequest(new { message = "Giá trị trạng thái dịch vụ không hợp lệ. Chỉ chấp nhận: 0 | 1" });
+
+            var thongTinDangNhap = await LayThongTinDangNhapAsync();
+            if (thongTinDangNhap == null)
+                return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
+
+            var phieuKham = await _context.PhieuKhams
+                .FirstOrDefaultAsync(pk => pk.MaPhieu == maPhieu);
+            if (phieuKham == null)
+                return NotFound(new { message = "Không tìm thấy phiếu khám" });
+
+            if (!CoQuyenTruyCapPhieu(phieuKham, thongTinDangNhap))
+                return StatusCode(403, new { message = "Bạn không có quyền cập nhật phiếu khám này" });
+
+            var dichVuYte = await _context.DichVuYtes
+                .FirstOrDefaultAsync(dv => dv.MaChiTiet == maChiTiet && dv.MaPhieu == maPhieu);
+            if (dichVuYte == null)
+                return NotFound(new { message = "Không tìm thấy chỉ định CLS trong phiếu khám này" });
+
+            dichVuYte.TrangThaiDichVu = request.TrangThaiDichVu;
+            if (request.KetQua != null)
+                dichVuYte.KetQua = ChuanHoaChuoi(request.KetQua);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Cập nhật trạng thái dịch vụ CLS thành công",
+                data = new
+                {
+                    maChiTiet = dichVuYte.MaChiTiet,
+                    maDV = dichVuYte.MaDv,
+                    ketQua = dichVuYte.KetQua,
+                    trangThaiDichVu = dichVuYte.TrangThaiDichVu
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "[CapNhatTrangThaiChiDinhCls] Lỗi khi cập nhật CLS {MaChiTiet} của phiếu {MaPhieu}",
+                maChiTiet, maPhieu);
             return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
@@ -558,8 +644,24 @@ public class KhamBenhController : ControllerBase
     {
         string today = DateTime.Now.ToString("yyMMdd");
         string prefix = $"DT{today}";
-        int count = await _context.DonThuocs.CountAsync(dt => dt.MaDonThuoc.StartsWith(prefix));
-        return $"{prefix}{count + 1:D3}";
+
+        // Lấy mã lớn nhất trong ngày thay vì đếm COUNT
+        // → tránh sinh mã trùng khi có bản ghi bị xóa (count != max index)
+        var maCuoiCung = await _context.DonThuocs
+            .Where(dt => dt.MaDonThuoc.StartsWith(prefix))
+            .OrderByDescending(dt => dt.MaDonThuoc)
+            .Select(dt => dt.MaDonThuoc)
+            .FirstOrDefaultAsync();
+
+        int soTiepTheo = 1;
+        if (maCuoiCung != null
+            && maCuoiCung.Length > prefix.Length
+            && int.TryParse(maCuoiCung[prefix.Length..], out int soHienTai))
+        {
+            soTiepTheo = soHienTai + 1;
+        }
+
+        return $"{prefix}{soTiepTheo:D3}";
     }
 
     private static string? ChuanHoaChuoi(string? value)
