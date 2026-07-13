@@ -9,7 +9,7 @@ namespace PhongKhamBackend.Controllers;
 
 [ApiController]
 [Route("api/TiepDon")]
-[Authorize]   // Tất cả endpoint trong controller này đều yêu cầu đăng nhập
+[Authorize]   // Tất cả endpoint đều yêu cầu đăng nhập
 public class TiepDonController : ControllerBase
 {
     private readonly QuanLyPhongKhamDbContext _context;
@@ -19,80 +19,69 @@ public class TiepDonController : ControllerBase
         _context = context;
     }
 
-    // DTO
-    /// DTO cho API Tiếp nhận bệnh nhân (tạo phiếu khám)
-    
+    // DTO cho API Tiếp nhận bệnh nhân (tạo phiếu khám)
     public class TiepNhanBenhNhanRequest
     {
         // -- Thông tin bệnh nhân (bảng BenhNhan) --
-        public string? MaBN       { get; set; }                    // Mã BN cũ — bỏ trống / null nếu BN mới
+        public string? MaBN       { get; set; }                    // Mã BN cũ — bỏ trống/null nếu là BN mới
         public string  HoTen      { get; set; } = string.Empty;   // Họ và tên (CHỮ HOA) — BẮT BUỘC
-        public string  NgaySinh   { get; set; } = string.Empty;   // Ngày sinh dd/MM/yyyy — BẮT BUỘC
+        public string  NgaySinh   { get; set; } = string.Empty;   // DD-MM-YYYY — BẮT BUỘC
         public string  GioiTinh   { get; set; } = string.Empty;   // "Nam" | "Nữ" | "Khác" — BẮT BUỘC
-        public string  Sdt        { get; set; } = string.Empty;   // Số điện thoại 10 chữ số — BẮT BUỘC
+        public string  Sdt        { get; set; } = string.Empty;   // 10 chữ số — BẮT BUỘC
         public string? DiaChi     { get; set; }                    // Địa chỉ — Tuỳ chọn
         public string? TienSuBenh { get; set; }                    // Tiền sử bệnh — Tuỳ chọn
 
         // -- Thông tin phiếu khám (bảng PhieuKham) --
-        public string?       MaNVBacSi    { get; set; }           // Mã NV bác sĩ chỉ định — Tuỳ chọn
-        public string        LyDoKham     { get; set; } = string.Empty;   // Lý do đến khám — BẮT BUỘC
-        public List<string>? DanhSachICD  { get; set; }           // Mảng mã ICD chẩn đoán ban đầu — Tuỳ chọn
+        public string  MaNVBacSi  { get; set; } = string.Empty;   // Mã NV bác sĩ chỉ định — BẮT BUỘC
+        public string  LyDoKham   { get; set; } = string.Empty;   // Lý do đến khám — BẮT BUỘC
+       
     }
 
-    //  GET api/TiepDon/tra-cuu?sdt={soDienThoai}
-    //    — Tra cứu bệnh nhân cũ theo SĐT
-    /// Lễ tân nhập SĐT để kiểm tra bệnh nhân đã có hồ sơ chưa.
-    /// Nếu tìm thấy → trả HTTP 200 với found = true kèm dữ liệu BN.
-    /// Nếu không tìm thấy → trả HTTP 200 với found = false (luồng bình thường).
-  
+
+    // ───────────────────────────────────────────────────────────────────────
+    // GET api/TiepDon/tra-cuu?sdt={soDienThoai}
+    // — Tra cứu bệnh nhân cũ theo SĐT
+    // Phân quyền: LeTan, Admin
+    // ───────────────────────────────────────────────────────────────────────
     [HttpGet("tra-cuu")]
     [Authorize(Roles = "LeTan,Admin")]
     public async Task<IActionResult> TraCuuBenhNhan([FromQuery] string? sdt)
     {
         try
         {
-            
-            // KIỂM TRA THAM SỐ SDT KHÔNG RỖNG
-        
-
-            // Tham số sdt bị rỗng hoặc thiếu
+            // Kiểm tra tham số sdt không rỗng
             if (string.IsNullOrWhiteSpace(sdt))
                 return BadRequest(new { message = "Vui lòng nhập số điện thoại để tra cứu!" });
 
-            // B3: VALIDATE ĐỊNH DẠNG SDT (10 chữ số, bắt đầu bằng 0)
-            
-            // Số điện thoại sai định dạng
+            // Validate định dạng SĐT (10 chữ số, bắt đầu bằng 0)
             if (!Regex.IsMatch(sdt.Trim(), @"^0\d{9}$"))
                 return BadRequest(new { message = "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0)!" });
 
-         
-            // SELECT TỪ BẢNG BenhNhan WHERE SDT = @sdt
-
+            // SELECT từ bảng BenhNhan WHERE SDT = @sdt
             var benhNhan = await _context.BenhNhans
+                .AsNoTracking()
                 .FirstOrDefaultAsync(bn => bn.Sdt == sdt.Trim());
 
-           
-            // KHÔNG TÌM THẤY → HTTP 200 với found = false
-            // đây là luồng bình thường, KHÔNG trả 404          
+            // Không tìm thấy → HTTP 200, found = false (luồng bình thường)
             if (benhNhan == null)
             {
                 return Ok(new
                 {
-                    found = false,
-                    data = (object?)null,
+                    found   = false,
+                    data    = (object?)null,
                     message = "Không tìm thấy hồ sơ bệnh nhân với số điện thoại này. Đây là bệnh nhân mới."
                 });
             }
 
-            // TÌM THẤY → HTTP 200 với found = true kèm dữ liệu BN
+            // Tìm thấy → HTTP 200, found = true kèm dữ liệu BN
             return Ok(new
             {
                 found = true,
-                data = new
+                data  = new
                 {
                     maBN       = benhNhan.MaBn,
                     hoTen      = benhNhan.HoTen,
-                    ngaySinh   = benhNhan.NgaySinh?.ToString("dd/MM/yyyy"),
+                    ngaySinh   = benhNhan.NgaySinh?.ToString("dd-MM-yyyy"),   // DD-MM-YYYY
                     gioiTinh   = benhNhan.GioiTinh,
                     sdt        = benhNhan.Sdt,
                     diaChi     = benhNhan.DiaChi,
@@ -102,190 +91,143 @@ public class TiepDonController : ControllerBase
         }
         catch (Exception)
         {
-            // Hệ thống không kết nối được API hoặc Database
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
 
 
-    // POST api/TiepDon  —  Tiếp nhận bệnh nhân (Tạo phiếu khám)
-    /// Lễ tân hoàn tất form tiếp đón và lưu lại để tạo phiếu khám mới.
-    /// Hỗ trợ hai tình huống:
-    ///   A — BN cũ (có maBN): chỉ tạo PhieuKham, liên kết maBN có sẵn.
-    ///       Cập nhật diaChi/tienSuBenh nếu có thay đổi.
-    ///   B — BN mới (maBN rỗng): server tự sinh maBN, INSERT BenhNhan
-    ///       rồi tạo PhieuKham.
-    /// MaNV (lễ tân) được lấy tự động từ JWT token.
-    /// Toàn bộ B8→B11 chạy trong transaction.
+    // ───────────────────────────────────────────────────────────────────────
+    // POST api/TiepDon
+    // Tiếp nhận bệnh nhân (Tạo phiếu khám)
+    // Phân quyền: LeTan, Admin
+    // ───────────────────────────────────────────────────────────────────────
     [HttpPost]
     [Authorize(Roles = "LeTan,Admin")]
     public async Task<IActionResult> TiepNhanBenhNhan([FromBody] TiepNhanBenhNhanRequest request)
     {
         try
         {
-            // XÁC THỰC TOKEN, LẤY MaNV CỦA LỄ TÂN TỪ TOKEN
+            // Xác thực token (middleware đã xử lý; lấy thêm để verify claim)
             string? userIdClaim = User.FindFirstValue("userID");
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
-            {
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out _))
                 return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
-            }
 
-            // Lấy MaNV từ bảng NhanVien theo UserID
-            var nhanVienTiepDon = await _context.NhanViens
-                .FirstOrDefaultAsync(nv => nv.UserId == userId);
+            // Validate các trường bắt buộc ──────────────────────────
 
-            if (nhanVienTiepDon == null)
-            {
-                return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
-            }
-
-            string maNvTiepDon = nhanVienTiepDon.MaNv;
-
-            // VALIDATE CÁC TRƯỜNG BẮT BUỘC
-
-            // Không nhập họ tên
             if (string.IsNullOrWhiteSpace(request.HoTen))
                 return BadRequest(new { message = "Vui lòng nhập Họ và tên bệnh nhân!" });
 
-            // Không nhập số điện thoại
             if (string.IsNullOrWhiteSpace(request.Sdt))
                 return BadRequest(new { message = "Vui lòng nhập Số điện thoại!" });
 
-            // Không nhập ngày sinh
             if (string.IsNullOrWhiteSpace(request.NgaySinh))
                 return BadRequest(new { message = "Vui lòng nhập Ngày tháng năm sinh!" });
 
-            // Không nhập lý do khám
             if (string.IsNullOrWhiteSpace(request.LyDoKham))
                 return BadRequest(new { message = "Vui lòng nhập Lý do đến khám!" });
 
-            // Giới tính không hợp lệ
-            string[] gioiTinhHopLe = { "Nam", "Nữ", "Khác" };
-            if (string.IsNullOrWhiteSpace(request.GioiTinh) || !gioiTinhHopLe.Contains(request.GioiTinh.Trim()))
+            if (string.IsNullOrWhiteSpace(request.GioiTinh))
                 return BadRequest(new { message = "Giới tính không hợp lệ. Chỉ chấp nhận: Nam, Nữ, Khác!" });
 
-            // VALIDATE ĐỊNH DẠNG SĐT
+            // maNVBacSi BẮT BUỘC
+            if (string.IsNullOrWhiteSpace(request.MaNVBacSi))
+                return BadRequest(new { message = "Vui lòng chỉ định bác sĩ khám trước khi lưu tiếp đón!" });
 
-            // Số điện thoại sai định dạng
-            if (!Regex.IsMatch(request.Sdt, @"^0\d{9}$"))
+            // Validate định dạng SĐT ───────────────────────────────
+            if (!Regex.IsMatch(request.Sdt.Trim(), @"^0\d{9}$"))
                 return BadRequest(new { message = "Số điện thoại không đúng định dạng (phải gồm đúng 10 chữ số và bắt đầu bằng số 0, không chứa khoảng trắng)!" });
 
-            // VALIDATE NGÀY SINH (dd/MM/yyyy)
-
-            // Hỗ trợ cả dd/MM/yyyy và dd-MM-yyyy
-            string[] dateFormats = { "dd/MM/yyyy", "dd-MM-yyyy" };
+            // Validate ngaySinh (DD-MM-YYYY; hỗ trợ thêm dd/MM/yyyy) ─
+            string[] dateFormats = { "dd-MM-yyyy", "dd/MM/yyyy" };
             if (!DateOnly.TryParseExact(request.NgaySinh.Trim(), dateFormats,
                     System.Globalization.CultureInfo.InvariantCulture,
                     System.Globalization.DateTimeStyles.None, out DateOnly ngaySinh))
             {
-                // Ngày sinh sai định dạng
                 return BadRequest(new { message = "Ngày sinh không hợp lệ. Vui lòng kiểm tra lại!" });
             }
 
-            // Năm phải từ 1900 trở lên
             if (ngaySinh.Year < 1900)
                 return BadRequest(new { message = "Ngày sinh không hợp lệ. Vui lòng kiểm tra lại!" });
 
-            // Ngày sinh không thể là ngày trong tương lai
             if (ngaySinh > DateOnly.FromDateTime(DateTime.Now))
                 return BadRequest(new { message = "Ngày sinh không thể là ngày trong tương lai!" });
 
-            // VALIDATE GIỚI TÍNH
-            // (Đã validate ở B2 — 9.8.8)
+            // Validate gioiTinh ────────────────────────────────────
+            string[] gioiTinhHopLe = { "Nam", "Nữ", "Khác" };
+            if (!gioiTinhHopLe.Contains(request.GioiTinh.Trim()))
+                return BadRequest(new { message = "Giới tính không hợp lệ. Chỉ chấp nhận: Nam, Nữ, Khác!" });
 
-            // B6: VALIDATE danhSachICD NẾU CÓ
-            var danhSachICD = request.DanhSachICD?
-                .Where(icd => !string.IsNullOrWhiteSpace(icd))
-                .Select(icd => icd.Trim())
-                .ToList() ?? new List<string>();
+            // Validate maNVBacSi (bắt buộc, phải là RoleID=2) ──
+            string maNVBacSi = request.MaNVBacSi.Trim();
+            var bacSi = await _context.NhanViens
+                .AsNoTracking()
+                .Include(nv => nv.User)
+                .FirstOrDefaultAsync(nv => nv.MaNv == maNVBacSi);
 
-            if (danhSachICD.Count > 0)
-            {
-                foreach (var maICD in danhSachICD)
-                {
-                    bool icdExists = await _context.DanhMucIcds
-                        .AnyAsync(icd => icd.MaIcd == maICD);
-                    if (!icdExists)
-                    {
-                        // 9.8.11  Mã ICD không tồn tại
-                        return BadRequest(new { message = $"Mã bệnh ICD '{maICD}' không tồn tại trong danh mục. Vui lòng kiểm tra lại!" });
-                    }
-                }
-            }
+            if (bacSi == null || bacSi.User == null || bacSi.User.RoleId != 2)
+                return BadRequest(new { message = "Bác sĩ chỉ định không hợp lệ hoặc không tồn tại trong hệ thống!" });
 
-
-            // VALIDATE maNVBacSi NẾU CÓ
-
-            //  maNVBacSi không tồn tại hoặc không phải bác sĩ
-            if (!string.IsNullOrWhiteSpace(request.MaNVBacSi))
-            {
-                var bacSi = await _context.NhanViens
-                    .Include(nv => nv.User)
-                    .FirstOrDefaultAsync(nv => nv.MaNv == request.MaNVBacSi.Trim());
-
-                if (bacSi == null || bacSi.User == null || bacSi.User.RoleId != 2)
-                    return BadRequest(new { message = "Bác sĩ chỉ định không hợp lệ hoặc không tồn tại trong hệ thống!" });
-            }
-
-            // B8 → B11: CHẠY TRONG TRANSACTION
+            // Chạy trong transaction ───────────────────────────
             using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
                 string maBN;
-                bool isNewPatient;
+                bool   isNewPatient;
 
+                // BN mới
                 if (string.IsNullOrWhiteSpace(request.MaBN))
                 {
-                    
-                    // BỆNH NHÂN MỚI → Sinh maBN mới và INSERT BenhNhan
-                
                     isNewPatient = true;
 
-                    // Tạo BN mới: không cho phép trùng SĐT
+                    // Không cho phép trùng SĐT khi tạo BN mới
                     bool sdtExists = await _context.BenhNhans
                         .AnyAsync(bn => bn.Sdt == request.Sdt.Trim());
                     if (sdtExists)
                     {
                         await transaction.RollbackAsync();
-                        // SDT đã tồn tại
                         return Conflict(new { message = "Số điện thoại này đã có hồ sơ bệnh nhân trong hệ thống. Vui lòng tra cứu theo SĐT và dùng luồng bệnh nhân cũ!" });
                     }
 
                     // Sinh maBN: "BN" + yyMMdd + stt 3 chữ số
-                    string today = DateTime.Now.ToString("yyMMdd");
-                    string prefix = $"BN{today}";
+                    string todayBN  = DateTime.Now.ToString("yyMMdd");
+                    string prefixBN = $"BN{todayBN}";
 
-                    int count = await _context.BenhNhans
-                        .CountAsync(bn => bn.MaBn.StartsWith(prefix));
-                    int stt = count + 1;
+                    // Dùng MAX thay COUNT để tránh lỗi khi có bản ghi bị xoá
+                    var maBNCuoiCung = await _context.BenhNhans
+                        .Where(bn => bn.MaBn.StartsWith(prefixBN))
+                        .OrderByDescending(bn => bn.MaBn)
+                        .Select(bn => bn.MaBn)
+                        .FirstOrDefaultAsync();
 
-                    maBN = $"{prefix}{stt:D3}";  // VD: BN260609001
+                    int sttBN = 1;
+                    if (maBNCuoiCung != null
+                        && maBNCuoiCung.Length > prefixBN.Length
+                        && int.TryParse(maBNCuoiCung[prefixBN.Length..], out int soHienTaiBN))
+                    {
+                        sttBN = soHienTaiBN + 1;
+                    }
 
-                    // INSERT bệnh nhân mới
-                    var newBenhNhan = new BenhNhan
+                    maBN = $"{prefixBN}{sttBN:D3}";  // VD: BN260713001
+
+                    _context.BenhNhans.Add(new BenhNhan
                     {
                         MaBn       = maBN,
                         HoTen      = request.HoTen.Trim(),
                         NgaySinh   = ngaySinh,
                         GioiTinh   = request.GioiTinh.Trim(),
                         Sdt        = request.Sdt.Trim(),
-                        DiaChi     = string.IsNullOrWhiteSpace(request.DiaChi) ? null : request.DiaChi.Trim(),
+                        DiaChi     = string.IsNullOrWhiteSpace(request.DiaChi)     ? null : request.DiaChi.Trim(),
                         TienSuBenh = string.IsNullOrWhiteSpace(request.TienSuBenh) ? null : request.TienSuBenh.Trim()
-                    };
-
-                    _context.BenhNhans.Add(newBenhNhan);
+                    });
                     await _context.SaveChangesAsync();
                 }
                 else
                 {
-
-                    // BỆNH NHÂN CŨ → Kiểm tra maBN tồn tại
-
+                    // BN cũ ──────────────────────────────────────
                     isNewPatient = false;
                     maBN = request.MaBN.Trim();
 
-                    // maBN truyền lên nhưng không tồn tại
                     var existingBN = await _context.BenhNhans
                         .FirstOrDefaultAsync(bn => bn.MaBn == maBN);
 
@@ -295,86 +237,93 @@ public class TiepDonController : ControllerBase
                         return NotFound(new { message = "Không tìm thấy hồ sơ bệnh nhân với mã BN đã cung cấp!" });
                     }
 
-                    // Cập nhật diaChi, tienSuBenh nếu có thay đổi
-                    if (!string.IsNullOrWhiteSpace(request.DiaChi))
+                    // Cập nhật diaChi / tienSuBenh nếu có thay đổi
+                    bool changed = false;
+                    if (!string.IsNullOrWhiteSpace(request.DiaChi) && existingBN.DiaChi != request.DiaChi.Trim())
+                    {
                         existingBN.DiaChi = request.DiaChi.Trim();
-
-                    if (!string.IsNullOrWhiteSpace(request.TienSuBenh))
+                        changed = true;
+                    }
+                    if (!string.IsNullOrWhiteSpace(request.TienSuBenh) && existingBN.TienSuBenh != request.TienSuBenh.Trim())
+                    {
                         existingBN.TienSuBenh = request.TienSuBenh.Trim();
-
-                    await _context.SaveChangesAsync();
+                        changed = true;
+                    }
+                    if (changed) await _context.SaveChangesAsync();
                 }
 
-                
-                // SINH MÃ PHIẾU KHÁM
+                // Kiểm tra BN không có phiếu khám đang active ──
+                var phieuDangActive = await _context.PhieuKhams
+                    .Where(pk => pk.MaBn == maBN &&
+                                 (pk.TrangThaiKham == 0 ||
+                                  pk.TrangThaiKham == 1 ||
+                                  pk.TrangThaiKham == 2))
+                    .Select(pk => pk.MaPhieu)
+                    .FirstOrDefaultAsync();
+
+                if (phieuDangActive != null)
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict(new
+                    {
+                        message = $"Bệnh nhân này đang có 1 phiếu khám chưa hoàn tất (Mã phiếu: {phieuDangActive}). Vui lòng xử lý xong phiếu cũ trước khi tạo phiếu mới!"
+                    });
+                }
+
+                // Sinh mã phiếu khám
                 // Format: "PK_" + yyMMdd + "_" + stt 3 chữ số
-                string todayPK = DateTime.Now.ToString("yyMMdd");
+                string todayPK  = DateTime.Now.ToString("yyMMdd");
                 string prefixPK = $"PK_{todayPK}_";
 
-                int countPK = await _context.PhieuKhams
-                    .CountAsync(pk => pk.MaPhieu.StartsWith(prefixPK));
-                int sttPK = countPK + 1;
+                var maPKCuoiCung = await _context.PhieuKhams
+                    .Where(pk => pk.MaPhieu.StartsWith(prefixPK))
+                    .OrderByDescending(pk => pk.MaPhieu)
+                    .Select(pk => pk.MaPhieu)
+                    .FirstOrDefaultAsync();
 
-                string maPhieu = $"{prefixPK}{sttPK:D3}";  // VD: PK_260609_001
+                int sttPK = 1;
+                if (maPKCuoiCung != null
+                    && maPKCuoiCung.Length > prefixPK.Length
+                    && int.TryParse(maPKCuoiCung[prefixPK.Length..], out int soHienTaiPK))
+                {
+                    sttPK = soHienTaiPK + 1;
+                }
 
-                // INSERT PHIẾU KHÁM VỚI TrangThaiKham = 0
-                // MaNV = bác sĩ chỉ định nếu lễ tân đã chọn, ngược lại = lễ tân tiếp đón
-                string maNvLuuPhieu = !string.IsNullOrWhiteSpace(request.MaNVBacSi)
-                    ? request.MaNVBacSi.Trim()
-                    : maNvTiepDon;
+                string maPhieu = $"{prefixPK}{sttPK:D3}";  // VD: PK_260713_001
 
+                // INSERT PhieuKham
+                // MaNV = maNVBacSi
                 var newPhieuKham = new PhieuKham
                 {
                     MaPhieu       = maPhieu,
                     MaBn          = maBN,
-                    MaNv          = maNvLuuPhieu,      // Ưu tiên MaNV bác sĩ chỉ định, fallback lễ tân
+                    MaNv          = maNVBacSi,
                     NgayKham      = DateTime.Now,
                     LyDoKham      = request.LyDoKham.Trim(),
-                    TrangThaiKham = 0                  // Chờ khám
+                    TrangThaiKham = 0                // Chờ khám
                 };
 
                 _context.PhieuKhams.Add(newPhieuKham);
                 await _context.SaveChangesAsync();
 
-                
-                // INSERT danhSachICD VÀO ChiTietPhieuKhamICD (NẾU CÓ)
-                
-                if (danhSachICD.Count > 0)
-                {
-                    // Load lại phiếu khám kèm navigation MaIcds
-                    var phieuKham = await _context.PhieuKhams
-                        .Include(pk => pk.MaIcds)
-                        .FirstAsync(pk => pk.MaPhieu == maPhieu);
-
-                    foreach (var maICD in danhSachICD)
-                    {
-                        var icdEntity = await _context.DanhMucIcds
-                            .FirstAsync(icd => icd.MaIcd == maICD);
-                        phieuKham.MaIcds.Add(icdEntity);
-                    }
-
-                    await _context.SaveChangesAsync();
-                }
-
-                // Commit transaction
                 await transaction.CommitAsync();
 
-                
-                // TRẢ VỀ HTTP 201 KÈM THÔNG TIN PHIẾU KHÁM VỪA TẠO
-                
+                // Trả HTTP 201
+                // Output: maBacSi / tenBacSi
                 return StatusCode(201, new
                 {
                     message = "Tiếp nhận bệnh nhân thành công",
-                    data = new
+                    data    = new
                     {
-                        maPhieu        = maPhieu,
-                        maBN           = maBN,
-                        hoTen          = request.HoTen.Trim(),
-                        ngayKham       = newPhieuKham.NgayKham?.ToString("o"),   // ISO 8601
-                        lyDoKham       = request.LyDoKham.Trim(),
-                        trangThaiKham  = 0,
-                        danhSachICD    = danhSachICD,
-                        isNewPatient   = isNewPatient
+                        maPhieu       = maPhieu,
+                        maBN          = maBN,
+                        hoTen         = request.HoTen.Trim(),
+                        ngayKham      = newPhieuKham.NgayKham?.ToString("o"),   // ISO 8601
+                        lyDoKham      = request.LyDoKham.Trim(),
+                        maBacSi       = maNVBacSi,                             // [CẬP NHẬT v2]
+                        tenBacSi      = bacSi.HoTen,                           // [CẬP NHẬT v2]
+                        trangThaiKham = 0,
+                        isNewPatient  = isNewPatient
                     }
                 });
             }
@@ -386,91 +335,108 @@ public class TiepDonController : ControllerBase
         }
         catch (Exception)
         {
-            // Hệ thống không kết nối được API hoặc Database
             return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
 
 
+    // ───────────────────────────────────────────────────────────────────────
     // GET api/TiepDon/danh-sach
-    // Lấy danh sách bệnh nhân đã tiếp đón
-    
-    
-    // Trả về danh sách phiếu khám (mặc định trong ngày) kèm thông tin
-    // tóm tắt bệnh nhân. Hỗ trợ lọc theo trạng thái, bác sĩ, ngày
-    // khám, tìm kiếm theo họ tên / SĐT / mã BN, và phân trang.
-    
+    //   — Lấy danh sách bệnh nhân đã tiếp đón
+    // Phân quyền: LeTan, BacSi, Admin
+    //
+    // Phạm vi theo role:
+    //   - Admin / LeTan: xem TẤT CẢ; có thể lọc thêm bằng query maBacSi
+    //   - BacSi: CHỈ xem phiếu của chính mình (MaNV = maNV từ token);
+    //             tham số maBacSi bị BỎ QUA kể cả khi truyền lên
+    // ───────────────────────────────────────────────────────────────────────
     [HttpGet("danh-sach")]
     [Authorize(Roles = "LeTan,BacSi,Admin")]
     public async Task<IActionResult> LayDanhSachTiepDon(
-        [FromQuery] string? search = null,
-        [FromQuery] string? maBacSi = null,
-        [FromQuery] int? trangThai = null,
-        [FromQuery] string? ngayKham = null,
-        [FromQuery] int page = 1,
-        [FromQuery] int limit = 100)
+        [FromQuery] string? search    = null,
+        [FromQuery] string? maBacSi   = null,
+        [FromQuery] int?    trangThai = null,
+        [FromQuery] string? ngayKham  = null,
+        [FromQuery] int     page      = 1,
+        [FromQuery] int     limit     = 100)
     {
         try
         {
-            
-            // VALIDATE THAM SỐ ĐẦU VÀO
-            
+            // Lấy role + MaNV từ token
+            bool isBacSi = User.IsInRole("BacSi");
+            string? maNVTuToken = null;
 
-            //  Giá trị trangThai không hợp lệ
+            if (isBacSi)
+            {
+                // Bác sĩ cần MaNV để tự giới hạn phạm vi
+                string? userIdClaim = User.FindFirstValue("userID");
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+                    return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
+
+                var nhanVien = await _context.NhanViens
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(nv => nv.UserId == userId);
+
+                if (nhanVien == null)
+                    return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
+
+                maNVTuToken = nhanVien.MaNv;
+            }
+
+            // Validate trangThai
             if (trangThai.HasValue && !new[] { 0, 1, 2, 3 }.Contains(trangThai.Value))
                 return BadRequest(new { message = "Giá trị trạng thái không hợp lệ. Chỉ chấp nhận: 0 | 1 | 2 | 3" });
 
-            //  Định dạng ngayKham không hợp lệ
+            // Validate ngayKham — mặc định hôm nay; hỗ trợ DD-MM-YYYY theo đặc tả
             DateOnly ngayLoc;
             if (!string.IsNullOrWhiteSpace(ngayKham))
             {
-                if (!DateOnly.TryParseExact(ngayKham.Trim(), "yyyy-MM-dd",
+                string[] dateFormats = { "dd-MM-yyyy", "dd/MM/yyyy", "yyyy-MM-dd" };
+                if (!DateOnly.TryParseExact(ngayKham.Trim(), dateFormats,
                         System.Globalization.CultureInfo.InvariantCulture,
                         System.Globalization.DateTimeStyles.None, out ngayLoc))
                 {
-                    return BadRequest(new { message = "Định dạng ngày lọc không hợp lệ. Vui lòng nhập theo định dạng YYYY-MM-DD!" });
+                    return BadRequest(new { message = "Định dạng ngày lọc không hợp lệ. Vui lòng nhập theo định dạng DD-MM-YYYY!" });
                 }
             }
             else
             {
-                // Mặc định: ngày hiện tại
                 ngayLoc = DateOnly.FromDateTime(DateTime.Now);
             }
 
-            //  Giá trị page hoặc limit không hợp lệ
+            // Validate phân trang
             if (page <= 0 || limit <= 0)
                 return BadRequest(new { message = "Giá trị phân trang không hợp lệ" });
 
-            // Cap limit tối đa 200
             if (limit > 200) limit = 200;
 
-            
-            // XÂY DỰNG QUERY
-            
-
-            // Lọc theo ngày khám (so sánh phần DATE)
-            DateTime ngayBatDau = ngayLoc.ToDateTime(TimeOnly.MinValue);
+            // Build query
+            DateTime ngayBatDau  = ngayLoc.ToDateTime(TimeOnly.MinValue);
             DateTime ngayKetThuc = ngayLoc.ToDateTime(TimeOnly.MaxValue);
 
             var query = _context.PhieuKhams
-                .Include(pk => pk.MaBnNavigation)       // BenhNhan
-                .Include(pk => pk.MaNvNavigation)       // NhanVien (MaNV dùng chung)
+                .AsNoTracking()
+                .Include(pk => pk.MaBnNavigation)
+                .Include(pk => pk.MaNvNavigation)
                 .Where(pk => pk.NgayKham >= ngayBatDau && pk.NgayKham <= ngayKetThuc);
 
-            // Lọc theo trạng thái khám
+            // Lọc theo role
+            if (isBacSi)
+            {
+                // BacSi: chỉ xem phiếu của chính mình
+                query = query.Where(pk => pk.MaNv == maNVTuToken);
+            }
+            else if (!string.IsNullOrWhiteSpace(maBacSi))
+            {
+                // Admin / LeTan: lọc theo maBacSi nếu có
+                query = query.Where(pk => pk.MaNv == maBacSi.Trim());
+            }
+
+            // Lọc theo trạng thái
             if (trangThai.HasValue)
-            {
                 query = query.Where(pk => pk.TrangThaiKham == trangThai.Value);
-            }
 
-            // Lọc theo bác sĩ (dự phòng — qua MaNV khi bác sĩ nhận ca)
-            if (!string.IsNullOrWhiteSpace(maBacSi))
-            {
-                string maBsTrim = maBacSi.Trim();
-                query = query.Where(pk => pk.MaNv == maBsTrim);
-            }
-
-            // Tìm kiếm theo họ tên, SĐT hoặc mã BN
+            // Tìm kiếm
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string searchTrim = search.Trim().ToLower();
@@ -480,209 +446,190 @@ public class TiepDonController : ControllerBase
                     (pk.MaBn != null && pk.MaBn.ToLower().Contains(searchTrim)));
             }
 
-                
-            // ĐẾM TỔNG VÀ PHÂN TRANG
-            
-            int total = await query.CountAsync();
+            // B5: Đếm tổng
+            int total      = await query.CountAsync();
             int totalPages = (int)Math.Ceiling((double)total / limit);
 
+            // B6: Phân trang
             var danhSach = await query
-                .OrderBy(pk => pk.NgayKham)    // ASC theo đặc tả
+                .OrderBy(pk => pk.NgayKham)   // ASC theo đặc tả
                 .Skip((page - 1) * limit)
                 .Take(limit)
                 .Select(pk => new
                 {
-                    maPhieu           = pk.MaPhieu,
-                    maBN              = pk.MaBn,
-                    hoTen             = pk.MaBnNavigation != null ? pk.MaBnNavigation.HoTen : null,
-                    ngaySinh          = pk.MaBnNavigation != null && pk.MaBnNavigation.NgaySinh != null
-                                            ? pk.MaBnNavigation.NgaySinh.Value.ToString("dd/MM/yyyy")
-                                            : null,
-                    gioiTinh          = pk.MaBnNavigation != null ? pk.MaBnNavigation.GioiTinh : null,
-                    sdt               = pk.MaBnNavigation != null ? pk.MaBnNavigation.Sdt : null,
-                    diaChi            = pk.MaBnNavigation != null ? pk.MaBnNavigation.DiaChi : null,
-                    lyDoKham          = pk.LyDoKham,
-                    ngayKham          = pk.NgayKham,
-                    trangThaiKham     = pk.TrangThaiKham,
-                    maBacSiChiDinh    = pk.MaNv,
-                    tenBacSiChiDinh   = pk.MaNvNavigation != null ? pk.MaNvNavigation.HoTen : null
+                    maPhieu       = pk.MaPhieu,
+                    maBN          = pk.MaBn,
+                    hoTen         = pk.MaBnNavigation != null ? pk.MaBnNavigation.HoTen : null,
+                    ngaySinh      = pk.MaBnNavigation != null && pk.MaBnNavigation.NgaySinh != null
+                                        ? pk.MaBnNavigation.NgaySinh.Value.ToString("dd-MM-yyyy")
+                                        : null,
+                    gioiTinh      = pk.MaBnNavigation != null ? pk.MaBnNavigation.GioiTinh : null,
+                    sdt           = pk.MaBnNavigation != null ? pk.MaBnNavigation.Sdt : null,
+                    diaChi        = pk.MaBnNavigation != null ? pk.MaBnNavigation.DiaChi : null,
+                    lyDoKham      = pk.LyDoKham,
+                    ngayKhamRaw   = pk.NgayKham,
+                    trangThaiKham = pk.TrangThaiKham,
+                    // tên field: maBacSi / tenBacSi
+                    maBacSi       = pk.MaNv,
+                    tenBacSi      = pk.MaNvNavigation != null ? pk.MaNvNavigation.HoTen : null
                 })
                 .ToListAsync();
 
-            
-            // TRẢ VỀ KẾT QUẢ
-            
+            // B7: Trả HTTP 200
             return Ok(new
             {
-                data = danhSach,
-                pagination = new
+                data = danhSach.Select(pk => new
                 {
-                    page,
-                    limit,
-                    total,
-                    totalPages
-                },
+                    pk.maPhieu,
+                    pk.maBN,
+                    pk.hoTen,
+                    pk.ngaySinh,
+                    pk.gioiTinh,
+                    pk.sdt,
+                    pk.diaChi,
+                    pk.lyDoKham,
+                    ngayKham      = pk.ngayKhamRaw?.ToString("o"),  // ISO 8601
+                    pk.trangThaiKham,
+                    pk.maBacSi,
+                    pk.tenBacSi
+                }),
+                pagination = new { page, limit, total, totalPages },
                 filter = new
                 {
-                    ngayKham  = ngayLoc.ToString("yyyy-MM-dd"),
+                    ngayKham  = ngayLoc.ToString("dd-MM-yyyy"),
                     trangThai = trangThai ?? (object?)null,
-                    maBacSi   = string.IsNullOrWhiteSpace(maBacSi) ? (object?)null : maBacSi.Trim(),
+                    // BacSi: luôn trả maBacSi = chính mình; Admin/LeTan: trả tham số đã lọc
+                    maBacSi   = isBacSi
+                                    ? maNVTuToken
+                                    : (string.IsNullOrWhiteSpace(maBacSi) ? (object?)null : maBacSi.Trim()),
                     search    = string.IsNullOrWhiteSpace(search) ? (object?)null : search.Trim()
                 }
             });
         }
         catch (Exception)
         {
-            // Hệ thống không kết nối được API hoặc Database
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
 
 
-    // GET api/TiepDon/danh-sach-bac-si
-    // Lấy danh sách bác sĩ (phục vụ lễ tân chọn bác sĩ chỉ định khi tạo phiếu)
-    
-    // Trả về danh sách nhân viên có RoleID = 2 (BacSi) và IsActive = 1.
-    // Chỉ trả maNV + hoTen, không trả thông tin nhạy cảm khác.
-    
-    [HttpGet("danh-sach-bac-si")]
-    [Authorize(Roles = "LeTan,Admin")]
-    public async Task<IActionResult> LayDanhSachBacSi()
-    {
-        try
-        {
-            // SELECT NhanVien JOIN Users WHERE RoleID = 2 (BacSi) AND IsActive = 1
-            // Sắp xếp theo HoTen tăng dần
-            var danhSachBacSi = await _context.NhanViens
-                .Include(nv => nv.User)
-                .Where(nv => nv.User != null && nv.User.RoleId == 2 && nv.User.IsActive == true)
-                .OrderBy(nv => nv.HoTen)
-                .Select(nv => new
-                {
-                    maNV  = nv.MaNv,
-                    hoTen = nv.HoTen
-                })
-                .ToListAsync();
-
-            return Ok(new { data = danhSachBacSi });
-        }
-        catch (Exception)
-        {
-            // Hệ thống không kết nối được API hoặc Database
-            return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
-        }
-    }
-
-
+    // ───────────────────────────────────────────────────────────────────────
     // GET api/TiepDon/{maPhieu}
-    // Xem chi tiết hồ sơ bệnh nhân
-    
-    // Trả về toàn bộ thông tin của một lượt khám theo maPhieu, bao gồm:
-    // thông tin cá nhân bệnh nhân, thông tin phiếu khám (sinh hiệu,
-    // kết luận, lý do khám), danh sách ICD chẩn đoán, danh sách chỉ
-    // định dịch vụ y tế / cận lâm sàng và đơn thuốc đã kê (nếu có).
-    
+    //   — Xem chi tiết hồ sơ bệnh nhân (theo phiếu khám)
+    // Phân quyền: LeTan, BacSi, Admin
+    //
+    // Output field:
+    //   maBacSi / tenBacSi
+    // ───────────────────────────────────────────────────────────────────────
     [HttpGet("{maPhieu}")]
     [Authorize(Roles = "LeTan,BacSi,Admin")]
     public async Task<IActionResult> XemChiTietHoSo(string maPhieu)
     {
         try
         {
-            
-            // KIỂM TRA maPhieu TỒN TẠI
-            
+            // B2: Kiểm tra maPhieu tồn tại
             var phieuKham = await _context.PhieuKhams
+                .AsNoTracking()
                 .Include(pk => pk.MaBnNavigation)                          // BenhNhan
-                .Include(pk => pk.MaNvNavigation)                          // NhanVien (MaNV = bác sĩ chỉ định)
+                .Include(pk => pk.MaNvNavigation)                          // NhanVien (= bác sĩ chỉ định)
                 .Include(pk => pk.MaIcds)                                  // DanhMucICD (many-to-many)
                 .Include(pk => pk.DichVuYtes)                              // DichVuYTe (chỉ định CLS)
-                    .ThenInclude(dv => dv.MaDvNavigation)                  // ChiTietDichVuYTe (catalog)
+                    .ThenInclude(dv => dv.MaDvNavigation)                  // ChiTietDichVuYTe (danh mục)
                 .Include(pk => pk.DonThuocs)                               // DonThuoc
                     .ThenInclude(dt => dt.ChiTietDonThuocs)                // ChiTietDonThuoc
                         .ThenInclude(ct => ct.MaThuocNavigation)           // DanhMucThuoc
                 .FirstOrDefaultAsync(pk => pk.MaPhieu == maPhieu);
 
-            //  maPhieu không tồn tại
             if (phieuKham == null)
                 return NotFound(new { message = "Không tìm thấy hồ sơ bệnh án. Phiếu khám có thể đã bị xóa hoặc không tồn tại!" });
 
-            // Lấy đơn thuốc đầu tiên (mỗi phiếu khám chỉ có tối đa 1 đơn)
-            var donThuoc = phieuKham.DonThuocs.FirstOrDefault();
+            // Lấy đơn thuốc (mỗi phiếu tối đa 1 đơn)
+            var donThuoc = phieuKham.DonThuocs
+                .OrderByDescending(dt => dt.NgayKeDon)
+                .FirstOrDefault();
 
-            var response = new
+            // B4: Tổng hợp và trả HTTP 200
+            return Ok(new
             {
                 // --- Thông tin phiếu khám ---
                 maPhieu       = phieuKham.MaPhieu,
-                ngayKham      = phieuKham.NgayKham?.ToString("o"),    // ISO 8601
+                ngayKham      = phieuKham.NgayKham?.ToString("o"),
                 trangThaiKham = phieuKham.TrangThaiKham,
                 lyDoKham      = phieuKham.LyDoKham,
 
-                // --- Thông tin bệnh nhân (từ bảng BenhNhan) ---
+                // --- Thông tin bệnh nhân ---
                 maBN       = phieuKham.MaBn,
                 hoTen      = phieuKham.MaBnNavigation?.HoTen,
-                ngaySinh   = phieuKham.MaBnNavigation?.NgaySinh?.ToString("dd/MM/yyyy"),
+                ngaySinh   = phieuKham.MaBnNavigation?.NgaySinh?.ToString("dd-MM-yyyy"),
                 gioiTinh   = phieuKham.MaBnNavigation?.GioiTinh,
                 sdt        = phieuKham.MaBnNavigation?.Sdt,
                 diaChi     = phieuKham.MaBnNavigation?.DiaChi,
                 tienSuBenh = phieuKham.MaBnNavigation?.TienSuBenh,
 
-                // --- Bác sĩ chỉ định (từ NhanVien JOIN PhieuKham.MaNV) ---
-                maBacSiChiDinh  = phieuKham.MaNv,
-                tenBacSiChiDinh = phieuKham.MaNvNavigation?.HoTen,
+                // --- [CẬP NHẬT v2] Bác sĩ chỉ định: maBacSi / tenBacSi ---
+                maBacSi  = phieuKham.MaNv,
+                tenBacSi = phieuKham.MaNvNavigation?.HoTen,
 
-                // --- Sinh hiệu (do bác sĩ cập nhật qua API khám bệnh, có thể null) ---
+                // --- Sinh hiệu (bác sĩ cập nhật ở bước Khám cơ bản, có thể null) ---
                 mach     = phieuKham.Mach,
                 nhietDo  = phieuKham.NhietDo,
                 huyetAp  = phieuKham.HuyetAp,
                 canNang  = phieuKham.CanNang,
                 chieuCao = phieuKham.ChieuCao,
 
-                // --- Chẩn đoán (do bác sĩ cập nhật, có thể null/rỗng) ---
+                // --- Kết luận ---
                 ketLuan = phieuKham.KetLuan,
-                danhSachICD = phieuKham.MaIcds.Select(icd => new
-                {
-                    maICD   = icd.MaIcd,
-                    tenBenh = icd.TenBenh
-                }).ToList(),
 
-                // --- Chỉ định dịch vụ / cận lâm sàng (từ bảng DichVuYTe) ---
-                dichVuYTe = phieuKham.DichVuYtes.Select(dv => new
-                {
-                    maChiTiet       = dv.MaChiTiet,
-                    maDV            = dv.MaDv,
-                    tenDV           = dv.MaDvNavigation?.TenDv,
-                    ketQua          = dv.KetQua,
-                    trangThaiDichVu = dv.TrangThaiDichVu
-                }).ToList(),
-
-                // --- Đơn thuốc (từ bảng DonThuoc + ChiTietDonThuoc) ---
-                donThuoc = donThuoc == null ? new
-                {
-                    maDonThuoc     = (string?)null,
-                    ngayKeDon      = (string?)null,
-                    loiDanDonThuoc = (string?)null,
-                    chiTiet        = new List<object>()
-                } : new
-                {
-                    maDonThuoc     = (string?)donThuoc.MaDonThuoc,
-                    ngayKeDon      = (string?)donThuoc.NgayKeDon?.ToString("o"),   // ISO 8601
-                    loiDanDonThuoc = (string?)donThuoc.LoiDan,
-                    chiTiet        = donThuoc.ChiTietDonThuocs.Select(ct => (object)new
+                // --- ICD (do bác sĩ nhập ở bước Khám cơ bản) ---
+                danhSachICD = phieuKham.MaIcds
+                    .OrderBy(icd => icd.MaIcd)
+                    .Select(icd => new
                     {
-                        maThuoc   = ct.MaThuoc,
-                        tenThuoc  = ct.MaThuocNavigation?.TenThuoc,
-                        soLuong   = ct.SoLuong,
-                        cachDung  = ct.CachDung,
-                        donViTinh = ct.MaThuocNavigation?.DonViTinh
-                    }).ToList()
-                }
-            };
+                        maICD   = icd.MaIcd,
+                        tenBenh = icd.TenBenh
+                    }).ToList(),
 
-            return Ok(response);
+                // --- Chỉ định CLS (2 mức: 0=Chưa thực hiện, 1=Đã làm CLS) ---
+                dichVuYTe = phieuKham.DichVuYtes
+                    .OrderBy(dv => dv.MaChiTiet)
+                    .Select(dv => new
+                    {
+                        maChiTiet       = dv.MaChiTiet,
+                        maDV            = dv.MaDv,
+                        tenDV           = dv.MaDvNavigation?.TenDv,
+                        ketQua          = dv.KetQua,
+                        trangThaiDichVu = dv.TrangThaiDichVu   // 0=Chưa thực hiện | 1=Đã làm CLS
+                    }).ToList(),
+
+                // --- Đơn thuốc ---
+                donThuoc = donThuoc == null
+                    ? new
+                    {
+                        maDonThuoc     = (string?)null,
+                        ngayKeDon      = (string?)null,
+                        loiDanDonThuoc = (string?)null,
+                        chiTiet        = new List<object>()
+                    }
+                    : new
+                    {
+                        maDonThuoc     = (string?)donThuoc.MaDonThuoc,
+                        ngayKeDon      = (string?)donThuoc.NgayKeDon?.ToString("o"),
+                        loiDanDonThuoc = (string?)donThuoc.LoiDan,
+                        chiTiet        = donThuoc.ChiTietDonThuocs
+                            .OrderBy(ct => ct.MaThuoc)
+                            .Select(ct => (object)new
+                            {
+                                maThuoc   = ct.MaThuoc,
+                                tenThuoc  = ct.MaThuocNavigation?.TenThuoc,
+                                soLuong   = ct.SoLuong,
+                                cachDung  = ct.CachDung,
+                                donViTinh = ct.MaThuocNavigation?.DonViTinh
+                            }).ToList()
+                    }
+            });
         }
         catch (Exception)
         {
-            // Hệ thống không kết nối được API hoặc Database
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
