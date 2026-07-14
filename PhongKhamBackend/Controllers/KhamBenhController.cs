@@ -365,8 +365,9 @@ public class KhamBenhController : ControllerBase
                         .AnyAsync(dv => dv.MaPhieu == maPhieu && dv.MaDv == maDv);
                     if (daChiDinh)
                     {
-                        await transaction.RollbackAsync();
-                        return Conflict(new { message = "Dịch vụ CLS này đã được chỉ định cho phiếu khám" });
+                        // Fix: FE luôn gửi lại chiDinhCLSMoi kể cả ở các tab khác (kê thuốc, kết luận)
+                        // nên chỉ bỏ qua (idempotent) thay vì báo lỗi để tránh chặn nhầm
+                        continue;
                     }
 
                     _context.DichVuYtes.Add(new DichVuYte
@@ -401,7 +402,8 @@ public class KhamBenhController : ControllerBase
             await _context.SaveChangesAsync();
 
             // Nhóm 4 — Đơn thuốc
-            if (request.DonThuoc != null || request.LoiDan != null)
+            // Fix: dùng Count > 0 thay vì != null để tránh array rỗng [] từ FE kích hoạt nhầm
+            if (request.DonThuoc?.Count > 0 || request.LoiDan != null)
             {
                 // Chặn kê đơn nếu còn CLS chưa thực hiện (TrangThaiDichVu = 0)
                 bool conClsChuaLam = await _context.DichVuYtes
