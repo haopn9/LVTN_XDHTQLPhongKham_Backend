@@ -175,56 +175,76 @@ public class TiepDonController : ControllerBase
                 string maBN;
                 bool   isNewPatient;
 
-                // BN mới
+                // BN mới hay BN cũ không truyền MaBN
                 if (string.IsNullOrWhiteSpace(request.MaBN))
                 {
-                    isNewPatient = true;
+                    // Kiểm tra SĐT đã tồn tại trong hệ thống chưa
+                    var bnTheoSdt = await _context.BenhNhans
+                        .FirstOrDefaultAsync(bn => bn.Sdt == request.Sdt.Trim());
 
-                    // Không cho phép trùng SĐT khi tạo BN mới
-                    bool sdtExists = await _context.BenhNhans
-                        .AnyAsync(bn => bn.Sdt == request.Sdt.Trim());
-                    if (sdtExists)
+                    if (bnTheoSdt != null)
                     {
-                        await transaction.RollbackAsync();
-                        return Conflict(new { message = "Số điện thoại này đã có hồ sơ bệnh nhân trong hệ thống. Vui lòng tra cứu theo SĐT và dùng luồng bệnh nhân cũ!" });
+                        // ── BN cũ: lễ tân nhập SĐT nhưng không truyền MaBN (tái khám)
+                        //    → tự động dùng hồ sơ bệnh nhân đã có theo SĐT
+                        isNewPatient = false;
+                        maBN = bnTheoSdt.MaBn;
+
+                        // Cập nhật diaChi / tienSuBenh nếu có thay đổi
+                        bool changed = false;
+                        if (!string.IsNullOrWhiteSpace(request.DiaChi) && bnTheoSdt.DiaChi != request.DiaChi.Trim())
+                        {
+                            bnTheoSdt.DiaChi = request.DiaChi.Trim();
+                            changed = true;
+                        }
+                        if (!string.IsNullOrWhiteSpace(request.TienSuBenh) && bnTheoSdt.TienSuBenh != request.TienSuBenh.Trim())
+                        {
+                            bnTheoSdt.TienSuBenh = request.TienSuBenh.Trim();
+                            changed = true;
+                        }
+                        if (changed) await _context.SaveChangesAsync();
                     }
-
-                    // Sinh maBN: "BN" + yyMMdd + stt 3 chữ số
-                    string todayBN  = DateTime.Now.ToString("yyMMdd");
-                    string prefixBN = $"BN{todayBN}";
-
-                    // Dùng MAX thay COUNT để tránh lỗi khi có bản ghi bị xoá
-                    var maBNCuoiCung = await _context.BenhNhans
-                        .Where(bn => bn.MaBn.StartsWith(prefixBN))
-                        .OrderByDescending(bn => bn.MaBn)
-                        .Select(bn => bn.MaBn)
-                        .FirstOrDefaultAsync();
-
-                    int sttBN = 1;
-                    if (maBNCuoiCung != null
-                        && maBNCuoiCung.Length > prefixBN.Length
-                        && int.TryParse(maBNCuoiCung[prefixBN.Length..], out int soHienTaiBN))
+                    else
                     {
-                        sttBN = soHienTaiBN + 1;
+                        // ── BN mới: SĐT chưa có trong hệ thống → tạo hồ sơ mới
+                        isNewPatient = true;
+
+                        // Sinh maBN: "BN" + yyMMdd + stt 3 chữ số
+                        string todayBN  = DateTime.Now.ToString("yyMMdd");
+                        string prefixBN = $"BN{todayBN}";
+
+                        // Dùng MAX thay COUNT để tránh lỗi khi có bản ghi bị xoá
+                        var maBNCuoiCung = await _context.BenhNhans
+                            .Where(bn => bn.MaBn.StartsWith(prefixBN))
+                            .OrderByDescending(bn => bn.MaBn)
+                            .Select(bn => bn.MaBn)
+                            .FirstOrDefaultAsync();
+
+                        int sttBN = 1;
+                        if (maBNCuoiCung != null
+                            && maBNCuoiCung.Length > prefixBN.Length
+                            && int.TryParse(maBNCuoiCung[prefixBN.Length..], out int soHienTaiBN))
+                        {
+                            sttBN = soHienTaiBN + 1;
+                        }
+
+                        maBN = $"{prefixBN}{sttBN:D3}";  // VD: BN260713001
+
+                        _context.BenhNhans.Add(new BenhNhan
+                        {
+                            MaBn       = maBN,
+                            HoTen      = request.HoTen.Trim(),
+                            NgaySinh   = ngaySinh,
+                            GioiTinh   = request.GioiTinh.Trim(),
+                            Sdt        = request.Sdt.Trim(),
+                            DiaChi     = string.IsNullOrWhiteSpace(request.DiaChi)     ? null : request.DiaChi.Trim(),
+                            TienSuBenh = string.IsNullOrWhiteSpace(request.TienSuBenh) ? null : request.TienSuBenh.Trim()
+                        });
+                        await _context.SaveChangesAsync();
                     }
-
-                    maBN = $"{prefixBN}{sttBN:D3}";  // VD: BN260713001
-
-                    _context.BenhNhans.Add(new BenhNhan
-                    {
-                        MaBn       = maBN,
-                        HoTen      = request.HoTen.Trim(),
-                        NgaySinh   = ngaySinh,
-                        GioiTinh   = request.GioiTinh.Trim(),
-                        Sdt        = request.Sdt.Trim(),
-                        DiaChi     = string.IsNullOrWhiteSpace(request.DiaChi)     ? null : request.DiaChi.Trim(),
-                        TienSuBenh = string.IsNullOrWhiteSpace(request.TienSuBenh) ? null : request.TienSuBenh.Trim()
-                    });
-                    await _context.SaveChangesAsync();
                 }
                 else
                 {
-                    // BN cũ ──────────────────────────────────────
+                    // BN cũ — lễ tân truyền MaBN tường minh ──────────────────────
                     isNewPatient = false;
                     maBN = request.MaBN.Trim();
 
