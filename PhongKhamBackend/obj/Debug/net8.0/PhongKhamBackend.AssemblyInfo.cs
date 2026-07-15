@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PhongKhamBackend")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b0c5cabd46fdd70e9b105c6a8f364e00a72fb90c")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+aee7dd27bbc0e5bab8b4ebb89c8d1f9c53ea723a")]
 [assembly: System.Reflection.AssemblyProductAttribute("PhongKhamBackend")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PhongKhamBackend")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
