@@ -49,6 +49,9 @@ public class KhamBenhController : ControllerBase
         public string?              LoiDan   { get; set; }
         public List<DonThuocItem>?  DonThuoc { get; set; }
 
+        // Nhóm 4b: Kê vật tư (CỘNG DỒN - chỉ áp dụng cho phiếu có CLS)
+        public List<VatTuItem>? VatTuList { get; set; }
+
         // Nhóm 5: Kết luận khám
         public string? KetLuan { get; set; }
 
@@ -69,6 +72,13 @@ public class KhamBenhController : ControllerBase
         public string MaThuoc  { get; set; } = string.Empty;
         public int?   SoLuong  { get; set; }
         public string CachDung { get; set; } = string.Empty;
+    }
+
+    /// Item vật tư trong kê vật tư (nhóm 4b)
+    public class VatTuItem
+    {
+        public string MaVatTu { get; set; } = string.Empty;
+        public int?   SoLuong { get; set; }
     }
 
     // ─── Helper class ────────────────────────────────────────────────────────
@@ -575,6 +585,120 @@ public class KhamBenhController : ControllerBase
                 }
             }
 
+            // Nhóm 4b — Kê vật tư (CỘNG DỒN theo FEFO)
+            // Chỉ kích hoạt khi vatTuList gửi lên có ít nhất 1 phần tử
+            if (request.VatTuList?.Count > 0)
+            {
+                // Chặn cứng nếu phiếu không có bất kỳ chỉ định CLS nào
+                bool coChiDinhCLS = await _context.DichVuYtes
+                    .AnyAsync(dv => dv.MaPhieu == maPhieu);
+                if (!coChiDinhCLS)
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict(new { message = "Phiếu khám chưa có chỉ định CLS. Chỉ được kê vật tư cho phiếu có CLS!" });
+                }
+
+                // Validate danh sách: không được có maVatTu trùng trong cùng request
+                var maVatTuList = new List<string>();
+                foreach (var item in request.VatTuList)
+                {
+                    if (string.IsNullOrWhiteSpace(item.MaVatTu))
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new { message = "Vật tư không tồn tại hoặc đã ngừng sử dụng. Vui lòng kiểm tra lại" });
+                    }
+                    if (!item.SoLuong.HasValue || item.SoLuong.Value <= 0)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new { message = "Số lượng vật tư phải là số nguyên dương. Vui lòng nhập lại" });
+                    }
+                    maVatTuList.Add(item.MaVatTu.Trim());
+                }
+
+                if (maVatTuList.Count != maVatTuList.Distinct(StringComparer.OrdinalIgnoreCase).Count())
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict(new { message = "Danh sách vật tư không được chứa mã vật tư trùng nhau trong cùng một request" });
+                }
+
+                DateOnly homNay = DateOnly.FromDateTime(DateTime.Now);
+
+                foreach (var item in request.VatTuList)
+                {
+                    string maVatTu      = item.MaVatTu.Trim();
+                    int    soLuongCanKe = item.SoLuong!.Value;
+
+                    // (a) Validate maVatTu tồn tại và IsActive
+                    var vatTu = await _context.DanhMucVatTus
+                        .FirstOrDefaultAsync(v => v.MaVatTu == maVatTu && v.IsActive);
+                    if (vatTu == null)
+                    {
+                        await transaction.RollbackAsync();
+                        return BadRequest(new { message = "Vật tư không tồn tại hoặc đã ngừng sử dụng. Vui lòng kiểm tra lại" });
+                    }
+
+                    // (b) Tính tổng tồn khả dụng (các lô chưa hết hạn)
+                    int tonKhaDung = await _context.LoVatTus
+                        .Where(lo => lo.MaVatTu == maVatTu
+                                  && lo.HanSuDung >= homNay
+                                  && lo.SoLuongTon > 0)
+                        .SumAsync(lo => (int?)lo.SoLuongTon ?? 0);
+
+                    // (c) Chặn cứng nếu không đủ tồn
+                    if (tonKhaDung < soLuongCanKe)
+                    {
+                        await transaction.RollbackAsync();
+                        return Conflict(new
+                        {
+                            message = $"Vật tư '{vatTu.TenVatTu}' không đủ tồn kho (còn {tonKhaDung}, yêu cầu {soLuongCanKe}). Vui lòng kiểm tra lại hoặc liên hệ kho!"
+                        });
+                    }
+
+                    // (d) Trừ kho theo FEFO: sắp xếp HanSuDung ASC, trừ dần từng lô
+                    // Đồng thời ghi nhận GiaBan của lô đầu tiên bị trừ (dùng làm DonGia)
+                    var loVatTuList = await _context.LoVatTus
+                        .Where(lo => lo.MaVatTu == maVatTu
+                                  && lo.HanSuDung >= homNay
+                                  && lo.SoLuongTon > 0)
+                        .OrderBy(lo => lo.HanSuDung)   // lô hết hạn gần nhất trừ trước (FEFO)
+                        .ToListAsync();
+
+                    decimal giaBanLoDauTien = loVatTuList.First().GiaBan;  // GiaBan lô đầu tiên
+                    int     conLai          = soLuongCanKe;
+                    foreach (var lo in loVatTuList)
+                    {
+                        if (conLai <= 0) break;
+                        int truLo  = Math.Min(conLai, lo.SoLuongTon);
+                        lo.SoLuongTon -= truLo;
+                        conLai        -= truLo;
+                    }
+                    // conLai phải = 0 tại đây (đã kiểm tra tonKhaDung ở trên)
+
+                    // (e) CỘNG DỒN vào ChiTietVatTuPhieuKham
+                    var chiTietHienCo = await _context.ChiTietVatTuPhieuKhams
+                        .FirstOrDefaultAsync(ct => ct.MaPhieu == maPhieu && ct.MaVatTu == maVatTu);
+
+                    if (chiTietHienCo != null)
+                    {
+                        // Đã có dòng → cộng thêm SoLuong; DonGia GIỮ NGUYÊN theo lần kê đầu
+                        chiTietHienCo.SoLuong += soLuongCanKe;
+                    }
+                    else
+                    {
+                        // Chưa có → INSERT mới với DonGia = GiaBan lô đầu tiên bị trừ
+                        _context.ChiTietVatTuPhieuKhams.Add(new ChiTietVatTuPhieuKham
+                        {
+                            MaPhieu  = maPhieu,
+                            MaVatTu  = maVatTu,
+                            SoLuong  = soLuongCanKe,
+                            DonGia   = giaBanLoDauTien
+                        });
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+            }
+
             // Nhóm 5 — Kết luận khám
             if (request.KetLuan != null)
                 phieuKham.KetLuan = ChuanHoaChuoi(request.KetLuan);
@@ -660,6 +784,8 @@ public class KhamBenhController : ControllerBase
             .Include(pk => pk.DonThuocs)
                 .ThenInclude(dt => dt.ChiTietDonThuocs)
                     .ThenInclude(ct => ct.MaThuocNavigation)
+            .Include(pk => pk.ChiTietVatTuPhieuKhams)
+                .ThenInclude(ct => ct.MaVatTuNavigation)
             .FirstOrDefaultAsync(pk => pk.MaPhieu == maPhieu);
     }
 
@@ -740,7 +866,21 @@ public class KhamBenhController : ControllerBase
                             trangThaiPhatThuoc = ct.TrangThaiPhatThuoc ?? false
                         })
                         .ToList()
-                }
+                },
+
+            // [MỚI] Danh sách vật tư đã kê (CỘNG DỒN)
+            // Chỉ có dữ liệu khi phiếu có chỉ định CLS; phiếu không có CLS → mảng rỗng
+            danhSachVatTu = phieuKham.ChiTietVatTuPhieuKhams
+                .OrderBy(ct => ct.MaVatTu)
+                .Select(ct => new
+                {
+                    maVatTu    = ct.MaVatTu,
+                    tenVatTu   = ct.MaVatTuNavigation?.TenVatTu,
+                    donViTinh  = ct.MaVatTuNavigation?.DonViTinh,
+                    soLuong    = ct.SoLuong,
+                    donGia     = ct.DonGia
+                })
+                .ToList()
         };
     }
 
