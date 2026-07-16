@@ -4,7 +4,24 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PhongKhamBackend.Models;
+using QuestPDF.Drawing;
+using QuestPDF.Infrastructure;
 using System.Text;
+
+
+// Bắt buộc khai báo trước khi gọi bất kỳ API generate PDF nào (Document.GeneratePdf, v.v.),
+// nếu không sẽ bị throw exception lúc runtime chứ không phải lỗi biên dịch/
+QuestPDF.Settings.License = LicenseType.Community;
+// Đăng ký font tiếng Việt để PDF hiển thị đúng dấu
+// Cách 1: FontDiscoveryPaths (QuestPDF 2024.3+) – tự động quét thư mục Fonts
+QuestPDF.Settings.FontDiscoveryPaths.Add(Path.Combine(AppContext.BaseDirectory, "Fonts"));
+
+// Cách 2: RegisterFont thủ công (fallback, đảm bảo tương thích tất cả phiên bản)
+using (var regularStream = File.OpenRead("Fonts/static/Roboto-Regular.ttf"))
+    FontManager.RegisterFont(regularStream);
+
+using (var boldStream = File.OpenRead("Fonts/static/Roboto-Bold.ttf"))
+    FontManager.RegisterFont(boldStream);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -100,6 +117,13 @@ builder.Services.AddSwaggerGen(c =>
             Array.Empty<string>()
         }
     });
+
+    // Fix lỗi "Failed to load API definition" khi có nested DTO class trong controller:
+    // Dùng FullName thay vì ShortName để đảm bảo schema ID không bị trùng
+    c.CustomSchemaIds(t => t.FullName!.Replace("+", "."));
+
+    // Safety net: nếu có action trùng route, lấy cái đầu tiên thay vì throw exception
+    c.ResolveConflictingActions(apiDescriptions => apiDescriptions.First());
 });
 
 // ========== Build App ==========

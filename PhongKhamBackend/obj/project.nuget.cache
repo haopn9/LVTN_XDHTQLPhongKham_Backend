@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "QDeTtCub7iQ=",
+  "dgSpecHash": "on/bZ5ykG6c=",
   "success": true,
   "projectFilePath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\PhongKhamBackend.csproj",
   "expectedPackageFiles": [
@@ -47,6 +47,7 @@
     "C:\\Users\\Hao Phan\\.nuget\\packages\\microsoft.sqlserver.server\\1.0.0\\microsoft.sqlserver.server.1.0.0.nupkg.sha512",
     "C:\\Users\\Hao Phan\\.nuget\\packages\\microsoft.win32.systemevents\\6.0.0\\microsoft.win32.systemevents.6.0.0.nupkg.sha512",
     "C:\\Users\\Hao Phan\\.nuget\\packages\\mono.texttemplating\\2.2.1\\mono.texttemplating.2.2.1.nupkg.sha512",
+    "C:\\Users\\Hao Phan\\.nuget\\packages\\questpdf\\2026.7.0\\questpdf.2026.7.0.nupkg.sha512",
     "C:\\Users\\Hao Phan\\.nuget\\packages\\swashbuckle.aspnetcore\\6.6.2\\swashbuckle.aspnetcore.6.6.2.nupkg.sha512",
     "C:\\Users\\Hao Phan\\.nuget\\packages\\swashbuckle.aspnetcore.swagger\\6.6.2\\swashbuckle.aspnetcore.swagger.6.6.2.nupkg.sha512",
     "C:\\Users\\Hao Phan\\.nuget\\packages\\swashbuckle.aspnetcore.swaggergen\\6.6.2\\swashbuckle.aspnetcore.swaggergen.6.6.2.nupkg.sha512",

@@ -290,6 +290,9 @@ public partial class QuanLyPhongKhamDbContext : DbContext
             entity.Property(e => e.NgayThanhToan)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnType("datetime");
+            entity.Property(e => e.PhuongThucTt)
+                .HasMaxLength(20)
+                .HasColumnName("PhuongThucTT");
             entity.Property(e => e.ThanhTien).HasColumnType("decimal(18, 2)");
             entity.Property(e => e.TongTienDichVu)
                 .HasDefaultValue(0m)
