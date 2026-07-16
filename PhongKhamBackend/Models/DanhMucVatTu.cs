@@ -16,4 +16,6 @@ public partial class DanhMucVatTu
     public bool IsActive { get; set; }
 
     public virtual ICollection<ChiTietVatTuPhieuKham> ChiTietVatTuPhieuKhams { get; set; } = new List<ChiTietVatTuPhieuKham>();
+
+    public virtual ICollection<LoVatTu> LoVatTus { get; set; } = new List<LoVatTu>();
 }

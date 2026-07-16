@@ -3,6 +3,10 @@
   "WorkspaceRootPath": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{14EBB941-8914-826D-6169-EF53AA54F3B6}|PhongKhamBackend\\PhongKhamBackend.csproj|c:\\lvtn\\lvtn_xdhtqlphongkham_backend\\phongkhambackend\\models\\chitietdichvuyte.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{14EBB941-8914-826D-6169-EF53AA54F3B6}|PhongKhamBackend\\PhongKhamBackend.csproj|solutionrelative:phongkhambackend\\models\\chitietdichvuyte.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{14EBB941-8914-826D-6169-EF53AA54F3B6}|PhongKhamBackend\\PhongKhamBackend.csproj|c:\\lvtn\\lvtn_xdhtqlphongkham_backend\\phongkhambackend\\models\\quanlyphongkhamdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{14EBB941-8914-826D-6169-EF53AA54F3B6}|PhongKhamBackend\\PhongKhamBackend.csproj|solutionrelative:phongkhambackend\\models\\quanlyphongkhamdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
@@ -22,11 +26,24 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 1,
+          "SelectedChildIndex": 0,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
+              "Title": "ChiTietDichVuYte.cs",
+              "DocumentMoniker": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Models\\ChiTietDichVuYte.cs",
+              "RelativeDocumentMoniker": "PhongKhamBackend\\Models\\ChiTietDichVuYte.cs",
+              "ToolTip": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Models\\ChiTietDichVuYte.cs",
+              "RelativeToolTip": "PhongKhamBackend\\Models\\ChiTietDichVuYte.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-07-01T07:45:39.577Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
               "Title": "DanhMucThuoc.cs",
               "DocumentMoniker": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Models\\DanhMucThuoc.cs",
               "RelativeDocumentMoniker": "PhongKhamBackend\\Models\\DanhMucThuoc.cs",
@@ -38,20 +55,19 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "QuanLyPhongKhamDbContext.cs",
               "DocumentMoniker": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
               "RelativeDocumentMoniker": "PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
               "ToolTip": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
               "RelativeToolTip": "PhongKhamBackend\\Models\\QuanLyPhongKhamDbContext.cs",
-              "ViewState": "AgIAACgAAAAAAAAAAAAswAAAAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAACoAAAAAAAAAAAAswAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-12T08:14:04.124Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-12T08:14:04.124Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 3,
               "Title": "Program.cs",
               "DocumentMoniker": "C:\\LVTN\\LVTN_XDHTQLPhongKham_Backend\\PhongKhamBackend\\Program.cs",
               "RelativeDocumentMoniker": "PhongKhamBackend\\Program.cs",

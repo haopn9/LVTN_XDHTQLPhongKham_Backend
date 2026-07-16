@@ -21,6 +21,8 @@ public partial class HoaDon
 
     public bool? TrangThaiThanhToan { get; set; }
 
+    public decimal? TongTienVatTu { get; set; }
+
     public virtual NhanVien? MaNvNavigation { get; set; }
 
     public virtual PhieuKham? MaPhieuNavigation { get; set; }
