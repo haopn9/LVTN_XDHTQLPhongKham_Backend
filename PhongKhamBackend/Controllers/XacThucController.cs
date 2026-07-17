@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using PhongKhamBackend.Models;
+using PhongKhamBackend.Services;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
@@ -17,16 +18,27 @@ public class XacThucController : ControllerBase
     private readonly QuanLyPhongKhamDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IMemoryCache _cache;
+    private readonly IEmailService _emailService;
 
     // Cấu hình giới hạn đăng nhập
     private const int MAX_LOGIN_ATTEMPTS = 5;
     private const int LOCKOUT_MINUTES = 5;
 
-    public XacThucController(QuanLyPhongKhamDbContext context, IConfiguration configuration, IMemoryCache cache)
+    // Cấu hình OTP
+    private const int OTP_EXPIRY_MINUTES   = 5;   // hiệu lực OTP
+    private const int OTP_RESEND_SECONDS   = 60;  // chờ tối thiểu giữa 2 lần gửi
+    private const int OTP_MAX_ATTEMPTS     = 5;   // số lần nhập sai tối đa
+
+    public XacThucController(
+        QuanLyPhongKhamDbContext context,
+        IConfiguration configuration,
+        IMemoryCache cache,
+        IEmailService emailService)
     {
-        _context = context;
+        _context      = context;
         _configuration = configuration;
-        _cache = cache;
+        _cache        = cache;
+        _emailService = emailService;
     }
 
     // DTO
@@ -241,108 +253,216 @@ public class XacThucController : ControllerBase
         _ => "Unknown"
     };
 
-    // DTO cho Quên mật khẩu
-    public class QuenMatKhauRequest
+    // ================================================================
+    // DTO cho API 1 — Gửi OTP Quên Mật Khẩu
+    // ================================================================
+    public class GuiOtpRequest
     {
-        public string Email             { get; set; } = string.Empty;
-        public string SoDienThoai       { get; set; } = string.Empty;
-        public string MatKhauMoi        { get; set; } = string.Empty;
-        public string NhapLaiMatKhauMoi { get; set; } = string.Empty;
+        public string Email       { get; set; } = string.Empty;
+        public string SoDienThoai { get; set; } = string.Empty;
     }
 
-    // POST api/xacthuc/QuenMatKhau
-    // Đặt lại mật khẩu khi quên — không cần đăng nhập.
-    // Xác thực danh tính qua Email + Số điện thoại.
-    [HttpPost("QuenMatKhau")]
+    // POST api/xacthuc/GuiOtpQuenMatKhau
+    // Xác thực Email + SĐT, sinh OTP 6 số, gửi email, lưu cache 5 phút.
+    // Endpoint public — không yêu cầu token.
+    [HttpPost("GuiOtpQuenMatKhau")]
     [AllowAnonymous]
-    public async Task<IActionResult> QuenMatKhau([FromBody] QuenMatKhauRequest request)
+    public async Task<IActionResult> GuiOtpQuenMatKhau([FromBody] GuiOtpRequest request)
     {
-        
-        // Không để trống bất kỳ trường nào
-        if (string.IsNullOrWhiteSpace(request.Email)
-            || string.IsNullOrWhiteSpace(request.SoDienThoai)
-            || string.IsNullOrWhiteSpace(request.MatKhauMoi)
-            || string.IsNullOrWhiteSpace(request.NhapLaiMatKhauMoi))
-        {
+        // B5: Kiểm tra không để trống
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.SoDienThoai))
             return BadRequest(new { message = "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết" });
-        }
 
-        
-        // Email phải đúng định dạng
-        if (!System.Text.RegularExpressions.Regex.IsMatch(
-                request.Email.Trim(),
-                @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
-        {
+        // B5: Email phải đúng định dạng
+        string emailInput = request.Email.Trim();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(emailInput, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
             return BadRequest(new { message = "Email không đúng định dạng" });
-        }
 
-      
-        // Mật khẩu mới phải đạt quy tắc
-       
-        var loiMatKhau = KiemTraQuyTacMatKhau(request.MatKhauMoi);
-        if (loiMatKhau.Count > 0)
+        // B6: Chống spam — tối thiểu 60 giây giữa 2 lần gửi
+        string lastSentKey = $"otpLastSent_{emailInput.ToLower()}";
+        if (_cache.TryGetValue(lastSentKey, out DateTime lastSentTime))
         {
-            return BadRequest(new
+            double secondsSinceLast = (DateTime.UtcNow - lastSentTime).TotalSeconds;
+            if (secondsSinceLast < OTP_RESEND_SECONDS)
             {
-                message = "Mật khẩu mới không đạt yêu cầu",
-                chiTiet = loiMatKhau
-            });
+                return StatusCode(429, new
+                {
+                    message = "Vui lòng đợi ít nhất 60 giây trước khi yêu cầu gửi lại OTP"
+                });
+            }
         }
 
-        
-        // Nhập lại mật khẩu mới phải trùng khớp
-       
-        if (request.MatKhauMoi != request.NhapLaiMatKhauMoi)
-        {
-            return BadRequest(new { message = "Nhập lại mật khẩu không khớp" });
-        }
-
-        
-        //  Tìm tài khoản theo Email + kiểm tra SĐT
-        
+        // B7 + B8: Tìm tài khoản theo Email, JOIN NhanVien kiểm tra SĐT
         User? user;
         try
         {
-            string emailInput = request.Email.Trim();
             user = await _context.Users
                 .Include(u => u.NhanVien)
                 .FirstOrDefaultAsync(u => u.Username == emailInput);
         }
         catch (Exception)
         {
-        
+            return StatusCode(503, new { message = "Không thể gửi OTP lúc này. Xin hãy thử lại" });
+        }
+
+        // B7 + B8: Gộp lỗi email không tồn tại hoặc SĐT không khớp (không lộ thông tin)
+        string sdtInput = request.SoDienThoai.Trim();
+        if (user == null || user.NhanVien == null || user.NhanVien.Sdt != sdtInput)
+            return BadRequest(new { message = "Email hoặc số điện thoại không chính xác" });
+
+        // B9: Tài khoản phải đang hoạt động
+        if (user.IsActive == false)
+            return BadRequest(new { message = "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên" });
+
+        // B10: Sinh OTP ngẫu nhiên 6 chữ số
+        string otpCode = Random.Shared.Next(100000, 999999).ToString();
+
+        // B11: Lưu OTP vào cache, hiệu lực 5 phút
+        string otpKey      = $"otp_{emailInput.ToLower()}";
+        string attemptKey  = $"otpAttempts_{emailInput.ToLower()}";
+        var    otpExpiry   = TimeSpan.FromMinutes(OTP_EXPIRY_MINUTES);
+
+        _cache.Set(otpKey,     otpCode, otpExpiry);
+        _cache.Set(attemptKey, 0,       otpExpiry);  // reset bộ đếm sai
+
+        // B12: Gửi email chứa OTP
+        string toEmail = user.NhanVien!.Email ?? emailInput;  // email nhân viên (có thể là alias)
+        string hoTen   = user.NhanVien.HoTen ?? string.Empty;
+        try
+        {
+            await _emailService.SendOtpEmailAsync(toEmail, hoTen, otpCode, OTP_EXPIRY_MINUTES);
+        }
+        catch (Exception)
+        {
+            return StatusCode(503, new { message = "Không thể gửi OTP lúc này. Xin hãy thử lại" });
+        }
+
+        // B13: Lưu thời điểm gửi OTP (dùng để kiểm tra tần suất)
+        _cache.Set(lastSentKey, DateTime.UtcNow, TimeSpan.FromMinutes(OTP_EXPIRY_MINUTES + 1));
+
+        // B14: Trả về thành công
+        return Ok(new
+        {
+            message          = "Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư",
+            otpExpiryMinutes = OTP_EXPIRY_MINUTES
+        });
+    }
+
+
+    // ================================================================
+    // DTO cho API 2 — Xác Nhận OTP và Đổi Mật Khẩu
+    // ================================================================
+    public class XacNhanOtpRequest
+    {
+        public string Email           { get; set; } = string.Empty;
+        public string Otp             { get; set; } = string.Empty;
+        public string MatKhauMoi      { get; set; } = string.Empty;
+        public string NhapLaiMatKhauMoi { get; set; } = string.Empty;
+    }
+
+    // POST api/xacthuc/XacNhanOtpVaDoiMatKhau
+    // Xác nhận OTP còn hiệu lực và đặt mật khẩu mới.
+    // Endpoint public — không yêu cầu token.
+    [HttpPost("XacNhanOtpVaDoiMatKhau")]
+    [AllowAnonymous]
+    public async Task<IActionResult> XacNhanOtpVaDoiMatKhau([FromBody] XacNhanOtpRequest request)
+    {
+        // B1 (B5 spec): Không để trống bất kỳ trường nào
+        if (string.IsNullOrWhiteSpace(request.Email)
+            || string.IsNullOrWhiteSpace(request.Otp)
+            || string.IsNullOrWhiteSpace(request.MatKhauMoi)
+            || string.IsNullOrWhiteSpace(request.NhapLaiMatKhauMoi))
+        {
+            return BadRequest(new { message = "Người dùng bắt buộc nhập đủ các dữ liệu cần thiết" });
+        }
+
+        string emailInput = request.Email.Trim().ToLower();
+        string otpKey     = $"otp_{emailInput}";
+        string attemptKey = $"otpAttempts_{emailInput}";
+
+        // B5: Kiểm tra OTP còn tồn tại trong cache (chưa hết hạn 5 phút)
+        if (!_cache.TryGetValue(otpKey, out string? cachedOtp) || cachedOtp == null)
+        {
+            return BadRequest(new
+            {
+                message = "Mã OTP đã hết hạn hoặc không tồn tại. Vui lòng yêu cầu gửi lại OTP"
+            });
+        }
+
+        // B7: Lấy số lần sai hiện tại
+        _cache.TryGetValue(attemptKey, out int currentAttempts);
+
+        // B7: Kiểm tra đã vượt quá số lần sai cho phép (đề phòng cache còn OTP nhưng đã quá attempts)
+        if (currentAttempts >= OTP_MAX_ATTEMPTS)
+        {
+            _cache.Remove(otpKey);
+            _cache.Remove(attemptKey);
+            return BadRequest(new
+            {
+                message = "Bạn đã nhập sai quá số lần cho phép. Vui lòng yêu cầu gửi lại OTP"
+            });
+        }
+
+        // B6: So khớp OTP
+        if (request.Otp.Trim() != cachedOtp)
+        {
+            currentAttempts++;
+            if (currentAttempts >= OTP_MAX_ATTEMPTS)
+            {
+                // Đủ 5 lần sai — xóa OTP, buộc gửi lại
+                _cache.Remove(otpKey);
+                _cache.Remove(attemptKey);
+                return BadRequest(new
+                {
+                    message = "Bạn đã nhập sai quá số lần cho phép. Vui lòng yêu cầu gửi lại OTP"
+                });
+            }
+
+            // Cập nhật bộ đếm sai (giữ nguyên TTL của OTP)
+            _cache.Set(attemptKey, currentAttempts, _cache.GetOrCreate<MemoryCacheEntryOptions?>(
+                $"otpOpts_{emailInput}", _ => null) ?? new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(OTP_EXPIRY_MINUTES)
+                });
+
+            return BadRequest(new { message = "Mã OTP không chính xác" });
+        }
+
+        // B8: Tìm tài khoản và kiểm tra còn hoạt động
+        User? user;
+        try
+        {
+            string emailLookup = request.Email.Trim();
+            user = await _context.Users
+                .Include(u => u.NhanVien)
+                .FirstOrDefaultAsync(u => u.Username == emailLookup);
+        }
+        catch (Exception)
+        {
             return StatusCode(503, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
 
-       
-        // Email phải tồn tại & SĐT phải khớp
-        // (Gộp chung để không lộ thông tin tài khoản)
-       
-        string sdtInput = request.SoDienThoai.Trim();
-        if (user == null || user.NhanVien == null || user.NhanVien.Sdt != sdtInput)
-        {
-            return BadRequest(new { message = "Email hoặc số điện thoại không chính xác" });
-        }
+        if (user == null)
+            return StatusCode(503, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
 
-       
-        // Tài khoản phải đang hoạt động
-     
+        // B8: Tài khoản phải đang hoạt động
         if (user.IsActive == false)
-        {
             return BadRequest(new { message = "Tài khoản đã bị vô hiệu hóa, vui lòng liên hệ quản trị viên" });
-        }
 
-        
-        //  Mật khẩu mới không được trùng mật khẩu hiện tại
-       
+        // B9: Mật khẩu mới không được trùng mật khẩu hiện tại
         if (BCrypt.Net.BCrypt.Verify(request.MatKhauMoi, user.PasswordHash))
-        {
             return BadRequest(new { message = "Mật khẩu mới không được trùng với mật khẩu hiện tại" });
-        }
 
-       
-        //  Hash mật khẩu mới và cập nhật vào DB
-        
+        // Kiểm tra quy tắc mật khẩu mới
+        var loiMatKhau = KiemTraQuyTacMatKhau(request.MatKhauMoi);
+        if (loiMatKhau.Count > 0)
+            return BadRequest(new { message = "Mật khẩu mới không đạt yêu cầu", chiTiet = loiMatKhau });
+
+        // Nhập lại mật khẩu phải khớp
+        if (request.MatKhauMoi != request.NhapLaiMatKhauMoi)
+            return BadRequest(new { message = "Nhập lại mật khẩu không khớp" });
+
+        // B10: Hash và cập nhật mật khẩu mới
         try
         {
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.MatKhauMoi);
@@ -350,16 +470,19 @@ public class XacThucController : ControllerBase
         }
         catch (Exception)
         {
-          
             return StatusCode(503, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
 
+        // B11: Xóa OTP và bộ đếm sai khỏi cache (OTP chỉ dùng 1 lần)
+        _cache.Remove(otpKey);
+        _cache.Remove(attemptKey);
+
+        // B12: Thành công
         return Ok(new { message = "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại" });
     }
 
-   
+
     // Kiểm tra quy tắc mật khẩu (trả về danh sách lỗi)
-    
     private static List<string> KiemTraQuyTacMatKhau(string matKhau)
     {
         var loi = new List<string>();

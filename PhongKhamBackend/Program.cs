@@ -4,14 +4,15 @@ using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using PhongKhamBackend.Models;
+using PhongKhamBackend.Services;
 using QuestPDF.Drawing;
 using QuestPDF.Infrastructure;
 using System.Text;
 
-
 // Bắt buộc khai báo trước khi gọi bất kỳ API generate PDF nào (Document.GeneratePdf, v.v.),
 // nếu không sẽ bị throw exception lúc runtime chứ không phải lỗi biên dịch/
 QuestPDF.Settings.License = LicenseType.Community;
+
 // Đăng ký font tiếng Việt để PDF hiển thị đúng dấu
 // Cách 1: FontDiscoveryPaths (QuestPDF 2024.3+) – tự động quét thư mục Fonts
 QuestPDF.Settings.FontDiscoveryPaths.Add(Path.Combine(AppContext.BaseDirectory, "Fonts"));
@@ -32,7 +33,10 @@ builder.Services.AddDbContext<QuanLyPhongKhamDbContext>(options =>
 // ===== 2. Memory Cache (lưu login attempts & token blacklist) =====
 builder.Services.AddMemoryCache();
 
-// ===== 3. JWT Authentication =====
+// ===== 3. Email Service (gửi OTP qua Gmail SMTP) =====
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+// ===== 4. JWT Authentication =====
 var jwtConfig = builder.Configuration.GetSection("Jwt");
 var secretKey = jwtConfig["SecretKey"]!;
 var issuer    = jwtConfig["Issuer"]!;

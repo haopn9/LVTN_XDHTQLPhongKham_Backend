@@ -290,6 +290,23 @@ public class TiepDonController : ControllerBase
                     });
                 }
 
+                // Kiểm tra BN không có phiếu khám đã hoàn tất nhưng chưa thanh toán ──
+                var phieuChuaThanhToan = await _context.PhieuKhams
+                    .Where(pk => pk.MaBn == maBN
+                              && pk.TrangThaiKham == 3
+                              && !pk.HoaDons.Any(hd => hd.TrangThaiThanhToan == true))
+                    .Select(pk => pk.MaPhieu)
+                    .FirstOrDefaultAsync();
+
+                if (phieuChuaThanhToan != null)
+                {
+                    await transaction.RollbackAsync();
+                    return Conflict(new
+                    {
+                        message = $"Bệnh nhân này còn phiếu khám chưa thanh toán (Mã phiếu: {phieuChuaThanhToan}). Vui lòng thanh toán phiếu cũ trước khi tạo phiếu khám mới!"
+                    });
+                }
+
                 // Sinh mã phiếu khám
                 // Format: "PK_" + yyMMdd + "_" + stt 3 chữ số
                 string todayPK  = DateTime.Now.ToString("yyMMdd");

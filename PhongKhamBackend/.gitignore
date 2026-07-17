@@ -1,0 +1,17 @@
+# ---- Secrets ----
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.json
+!appsettings.Example.json
+
+# ---- Build output ----
+bin/
+obj/
+*.user
+
+# ---- IDE ----
+.vs/
+.vscode/
+*.suo
+*.userosscache
+*.sln.docstates
