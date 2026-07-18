@@ -62,4 +62,73 @@ public class DanhSachController : ControllerBase
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // GET api/DanhSach/bac-si-lich-trong
+    //   — Tra cứu bác sĩ có ca trực theo ngày + khoa (Bước 1 đặt lịch)
+    // Phân quyền: AllowAnonymous (public — phục vụ cổng đặt lịch của khách)
+    //
+    // Query params bắt buộc: ngayHen (yyyy-MM-dd), maKhoa
+    // Query params tuỳ chọn: caHen ("Sang" | "Chieu") — nếu không truyền → trả cả 2 ca
+    // ───────────────────────────────────────────────────────────────────────
+    [HttpGet("bac-si-lich-trong")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LayBacSiLichTrong(
+        [FromQuery] string? ngayHen = null,
+        [FromQuery] string? maKhoa  = null,
+        [FromQuery] string? caHen   = null)
+    {
+        try
+        {
+            // Validate ngayHen — bắt buộc
+            if (string.IsNullOrWhiteSpace(ngayHen))
+                return BadRequest(new { message = "Vui lòng cung cấp ngày hẹn (ngayHen)!" });
+
+            if (!DateOnly.TryParse(ngayHen.Trim(), out DateOnly ngay))
+                return BadRequest(new { message = "ngayHen không hợp lệ. Định dạng: yyyy-MM-dd" });
+
+            if (ngay < DateOnly.FromDateTime(DateTime.Now))
+                return BadRequest(new { message = "Ngày hẹn không thể là ngày trong quá khứ!" });
+
+            // Validate maKhoa — bắt buộc
+            if (string.IsNullOrWhiteSpace(maKhoa))
+                return BadRequest(new { message = "Vui lòng cung cấp mã khoa (maKhoa)!" });
+
+            // Validate caHen — tuỳ chọn
+            if (!string.IsNullOrWhiteSpace(caHen)
+                && caHen.Trim() != "Sang"
+                && caHen.Trim() != "Chieu")
+            {
+                return BadRequest(new { message = "caHen không hợp lệ. Chỉ chấp nhận: Sang, Chieu" });
+            }
+
+            // Query LichLamViec JOIN NhanVien theo maKhoa + ngayHen (+ caHen nếu có)
+            var query = _context.LichLamViecs
+                .AsNoTracking()
+                .Include(l => l.MaNvNavigation)
+                .Where(l => l.NgayLamViec == ngay
+                         && l.MaNvNavigation.MaKhoa == maKhoa.Trim())
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(caHen))
+                query = query.Where(l => l.CaLamViec == caHen.Trim());
+
+            var result = await query
+                .Select(l => new
+                {
+                    maNV       = l.MaNv,
+                    hoTen      = l.MaNvNavigation.HoTen,
+                    chuyenMon  = l.MaNvNavigation.ChuyenMon,
+                    caLamViec  = l.CaLamViec,
+                    phongKham  = l.PhongKham
+                })
+                .ToListAsync();
+
+            return Ok(result);
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
 }

@@ -16,4 +16,10 @@ public partial class DatLichKham
     public string? YeuCauKham { get; set; }
 
     public string? TrangThai { get; set; }
+
+    public string? MaNv { get; set; }
+
+    public string? CaHen { get; set; }
+
+    public virtual NhanVien? MaNvNavigation { get; set; }
 }
