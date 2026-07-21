@@ -24,7 +24,7 @@ public class LichLamViecController : ControllerBase
     public class DangKyCaTrucRequest
     {
         public string NgayLamViec { get; set; } = string.Empty;  // yyyy-MM-dd
-        public string CaLamViec   { get; set; } = string.Empty;  // "Sang" | "Chieu"
+        public string CaLamViec   { get; set; } = string.Empty;  // "Sang" | "Chieu" | "CaNgay"
         public string? PhongKham  { get; set; }
         public string? GhiChu     { get; set; }
     }
@@ -64,8 +64,8 @@ public class LichLamViecController : ControllerBase
             return BadRequest(new { message = "Vui lòng chọn ca làm việc!" });
 
         string caLamViec = request.CaLamViec.Trim();
-        if (caLamViec != "Sang" && caLamViec != "Chieu")
-            return BadRequest(new { message = "Ca làm việc không hợp lệ. Chỉ chấp nhận: Sang, Chieu" });
+        if (caLamViec != "Sang" && caLamViec != "Chieu" && caLamViec != "CaNgay")
+            return BadRequest(new { message = "Ca làm việc không hợp lệ. Chỉ chấp nhận: Sang, Chieu, CaNgay" });
 
         // ── 4. Kiểm tra MaKhoa của bác sĩ ─────────────────────────────────
         if (string.IsNullOrEmpty(bacSi.MaKhoa))
@@ -89,76 +89,97 @@ public class LichLamViecController : ControllerBase
                 System.Data.IsolationLevel.Serializable);
             try
             {
-                // Check trùng ca của chính bác sĩ
-                bool trungCa = await _context.LichLamViecs
-                    .AnyAsync(l => l.MaNv == maNV
-                               && l.NgayLamViec == ngayLamViec
-                               && l.CaLamViec   == caLamViec);
+                // Xác định các ca cần đăng ký (CaNgay = Sáng + Chiều)
+                var cacCaCanDangKy = caLamViec == "CaNgay"
+                    ? new[] { "Sang", "Chieu" }
+                    : new[] { caLamViec };
+                int soCanThem = cacCaCanDangKy.Length;
 
-                if (trungCa)
+                // Check trùng ca của chính bác sĩ (kiểm tra từng ca)
+                foreach (var ca in cacCaCanDangKy)
                 {
-                    await transaction.RollbackAsync();
-                    return Conflict(new { message = $"Bạn đã đăng ký ca {caLamViec} ngày {ngayLamViec:dd/MM/yyyy} rồi!" });
+                    bool trungCa = await _context.LichLamViecs
+                        .AnyAsync(l => l.MaNv == maNV
+                                    && l.NgayLamViec == ngayLamViec
+                                    && l.CaLamViec   == ca);
+                    if (trungCa)
+                    {
+                        await transaction.RollbackAsync();
+                        return Conflict(new { message = $"Bạn đã đăng ký ca {ca} ngày {ngayLamViec:dd/MM/yyyy} rồi!" });
+                    }
                 }
 
-                // Check giới hạn 3 ca/tuần
+                // Check giới hạn 3 ca/tuần (tính cả số ca sắp thêm)
                 int soCaTuanNay = await _context.LichLamViecs
                     .CountAsync(l => l.MaNv == maNV
                                   && l.NgayLamViec >= dauTuan
                                   && l.NgayLamViec <= cuoiTuan);
 
-                if (soCaTuanNay >= 3)
+                if (soCaTuanNay + soCanThem > 3)
                 {
                     await transaction.RollbackAsync();
-                    return Conflict(new
-                    {
-                        message = $"Bạn đã đăng ký đủ 3 ca trong tuần ({dauTuan:dd/MM} – {cuoiTuan:dd/MM/yyyy}). Không thể đăng ký thêm!"
-                    });
+                    string thongBao = soCanThem == 2
+                        ? $"Đăng ký cả ngày cần thêm 2 ca, nhưng bạn chỉ còn {3 - soCaTuanNay} ca trong tuần ({dauTuan:dd/MM} – {cuoiTuan:dd/MM/yyyy}). Không thể đăng ký!"
+                        : $"Bạn đã đăng ký đủ 3 ca trong tuần ({dauTuan:dd/MM} – {cuoiTuan:dd/MM/yyyy}). Không thể đăng ký thêm!";
+                    return Conflict(new { message = thongBao });
                 }
 
-                // Check 1 khoa tối đa 1 bác sĩ/ca/ngày
-                var bacSiCungKhoa = await _context.LichLamViecs
-                    .Include(l => l.MaNvNavigation)
-                    .Where(l => l.MaNv       != maNV
-                             && l.NgayLamViec == ngayLamViec
-                             && l.CaLamViec   == caLamViec
-                             && l.MaNvNavigation.MaKhoa == maKhoa)
-                    .Select(l => new { l.MaNvNavigation.HoTen })
-                    .FirstOrDefaultAsync();
-
-                if (bacSiCungKhoa != null)
+                // Check 1 khoa tối đa 1 bác sĩ/ca/ngày (kiểm tra từng ca)
+                foreach (var ca in cacCaCanDangKy)
                 {
-                    await transaction.RollbackAsync();
-                    return Conflict(new
+                    var bacSiCungKhoa = await _context.LichLamViecs
+                        .Include(l => l.MaNvNavigation)
+                        .Where(l => l.MaNv       != maNV
+                                 && l.NgayLamViec == ngayLamViec
+                                 && l.CaLamViec   == ca
+                                 && l.MaNvNavigation.MaKhoa == maKhoa)
+                        .Select(l => new { l.MaNvNavigation.HoTen })
+                        .FirstOrDefaultAsync();
+
+                    if (bacSiCungKhoa != null)
                     {
-                        message = $"Ca {caLamViec} ngày {ngayLamViec:dd/MM/yyyy} trong khoa của bạn đã có {bacSiCungKhoa.HoTen} đăng ký trước. Mỗi khoa chỉ có 1 bác sĩ trực/ca/ngày!"
-                    });
+                        await transaction.RollbackAsync();
+                        return Conflict(new
+                        {
+                            message = $"Ca {ca} ngày {ngayLamViec:dd/MM/yyyy} trong khoa của bạn đã có {bacSiCungKhoa.HoTen} đăng ký trước. Mỗi khoa chỉ có 1 bác sĩ trực/ca/ngày!"
+                        });
+                    }
                 }
 
-                // Insert bản ghi mới
-                var newLich = new LichLamViec
+                // Insert bản ghi lịch trực (1 hoặc 2 bản ghi tùy ca)
+                var newLichs = new List<LichLamViec>();
+                var ngayDangKy = DateTime.Now;
+                foreach (var ca in cacCaCanDangKy)
                 {
-                    MaNv        = maNV,
-                    NgayLamViec = ngayLamViec,
-                    CaLamViec   = caLamViec,
-                    PhongKham   = string.IsNullOrWhiteSpace(request.PhongKham) ? null : request.PhongKham.Trim(),
-                    GhiChu      = string.IsNullOrWhiteSpace(request.GhiChu)    ? null : request.GhiChu.Trim(),
-                    NgayDangKy  = DateTime.Now
-                };
+                    var newLich = new LichLamViec
+                    {
+                        MaNv        = maNV,
+                        NgayLamViec = ngayLamViec,
+                        CaLamViec   = ca,
+                        PhongKham   = string.IsNullOrWhiteSpace(request.PhongKham) ? null : request.PhongKham.Trim(),
+                        GhiChu      = string.IsNullOrWhiteSpace(request.GhiChu)    ? null : request.GhiChu.Trim(),
+                        NgayDangKy  = ngayDangKy
+                    };
+                    _context.LichLamViecs.Add(newLich);
+                    newLichs.Add(newLich);
+                }
 
-                _context.LichLamViecs.Add(newLich);
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
                 return StatusCode(201, new
                 {
-                    maLich      = newLich.MaLich,
-                    maNV        = newLich.MaNv,
-                    ngayLamViec = newLich.NgayLamViec.ToString("yyyy-MM-dd"),
-                    caLamViec   = newLich.CaLamViec,
-                    phongKham   = newLich.PhongKham,
-                    ghiChu      = newLich.GhiChu,
-                    ngayDangKy  = newLich.NgayDangKy.ToString("o")
+                    caLamViecDangKy = caLamViec,
+                    lichDaDangKy = newLichs.Select(l => new
+                    {
+                        maLich      = l.MaLich,
+                        maNV        = l.MaNv,
+                        ngayLamViec = l.NgayLamViec.ToString("yyyy-MM-dd"),
+                        caLamViec   = l.CaLamViec,
+                        phongKham   = l.PhongKham,
+                        ghiChu      = l.GhiChu,
+                        ngayDangKy  = l.NgayDangKy.ToString("o")
+                    }).ToList()
                 });
             }
             catch (Exception)

@@ -270,6 +270,7 @@ public class ThanhToanController : ControllerBase
                 .AsNoTracking()
                 .Include(pk => pk.MaBnNavigation)
                 .Include(pk => pk.MaNvNavigation)
+                .Include(pk => pk.MaIcds)                       // Chẩn đoán ICD
                 .Include(pk => pk.HoaDons)
                     .ThenInclude(hd => hd.MaNvNavigation)
                 .Include(pk => pk.DichVuYtes)
@@ -360,6 +361,10 @@ public class ThanhToanController : ControllerBase
                     maNV  = phieu.MaNvNavigation.MaNv,
                     hoTen = phieu.MaNvNavigation.HoTen
                 },
+                icdList = phieu.MaIcds
+                    .OrderBy(icd => icd.MaIcd)
+                    .Select(icd => new { maICD = icd.MaIcd, tenBenh = icd.TenBenh })
+                    .ToList(),
                 cls         = clsItems,
                 thuoc       = thuocItems,
                 vatTu       = vatTuItems,
@@ -684,6 +689,8 @@ public class ThanhToanController : ControllerBase
                 .Include(hd => hd.MaPhieuNavigation)
                     .ThenInclude(pk => pk!.MaNvNavigation) // Bác sĩ
                 .Include(hd => hd.MaPhieuNavigation)
+                    .ThenInclude(pk => pk!.MaIcds)         // Chẩn đoán ICD
+                .Include(hd => hd.MaPhieuNavigation)
                     .ThenInclude(pk => pk!.DichVuYtes)
                         .ThenInclude(dv => dv.MaDvNavigation)
                 .Include(hd => hd.MaPhieuNavigation)
@@ -741,6 +748,12 @@ public class ThanhToanController : ControllerBase
                     DonGia    = vt.DonGia,
                     ThanhTien = vt.SoLuong * vt.DonGia
                 })
+                .ToList() ?? new();
+
+            // ICD chẩn đoán — hiển thị trên PDF
+            var icdItems = phieu?.MaIcds
+                .OrderBy(icd => icd.MaIcd)
+                .Select(icd => $"{icd.MaIcd} – {icd.TenBenh}")
                 .ToList() ?? new();
 
             // === Build PDF bằng QuestPDF ===
@@ -825,6 +838,17 @@ public class ThanhToanController : ControllerBase
                         });
 
                         col.Item().Height(10);
+
+                        // === CHẨN ĐOÁN ICD ===
+                        if (icdItems.Count > 0)
+                        {
+                            col.Item().Background(Colors.Green.Lighten5).Padding(6).Row(row =>
+                            {
+                                row.AutoItem().Text("Chẩn đoán: ").Bold().FontSize(10);
+                                row.RelativeItem().Text(string.Join("  |  ", icdItems)).FontSize(10);
+                            });
+                            col.Item().Height(8);
+                        }
 
                         // === BẢNG CHI TIẾT CHI PHÍ ===
 

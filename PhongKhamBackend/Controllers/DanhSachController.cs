@@ -131,4 +131,53 @@ public class DanhSachController : ControllerBase
             return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
+
+    // ───────────────────────────────────────────────────────────────────────
+    // GET api/DanhSach/vat-tu
+    //   — Lấy danh sách vật tư CÒN TỒN KHO (phục vụ chọn khi kê/thêm vật tư)
+    // Phân quyền: BacSi, ThuNgan, Admin, QuanLyKhoThuoc
+    //
+    // Lấy từ LoVatTu (không phải DanhMucVatTu) vì cần biết tổng tồn thực tế
+    // trước khi cho chọn — tránh việc chọn xong mới báo lỗi hết hàng.
+    // Không trả giá bán ở đây vì giá được tính FEFO tại thời điểm kê (server-side),
+    // tránh lệch giá hiển thị vs giá thực tính lúc submit.
+    // ───────────────────────────────────────────────────────────────────────
+    [HttpGet("vat-tu")]
+    [Authorize(Roles = "BacSi,ThuNgan,Admin,QuanLyKhoThuoc")]
+    public async Task<IActionResult> LayDanhSachVatTuChon()
+    {
+        try
+        {
+            // Chỉ tính tồn kho từ các lô CÒN HẠN SỬ DỤNG — khớp với logic kê vật tư
+            DateOnly today = DateOnly.FromDateTime(DateTime.Today);
+
+            var danhSach = await _context.LoVatTus
+                .AsNoTracking()
+                .Where(lo => lo.MaVatTuNavigation != null && lo.MaVatTuNavigation.IsActive)
+                .GroupBy(lo => new
+                {
+                    lo.MaVatTu,
+                    TenVatTu  = lo.MaVatTuNavigation!.TenVatTu,
+                    DonViTinh = lo.MaVatTuNavigation.DonViTinh
+                })
+                .Select(g => new
+                {
+                    maVatTu   = g.Key.MaVatTu,
+                    tenVatTu  = g.Key.TenVatTu,
+                    donViTinh = g.Key.DonViTinh,
+                    // Chỉ cộng lô còn hạn sử dụng (tránh tính lô hết hạn vào tonKho)
+                    tonKho    = g.Where(lo => lo.HanSuDung >= today)
+                                 .Sum(lo => (int?)lo.SoLuongTon) ?? 0
+                })
+                .Where(vt => vt.tonKho > 0)   // chỉ hiện vật tư thực sự còn hàng khả dụng
+                .OrderBy(vt => vt.tenVatTu)
+                .ToListAsync();
+
+            return Ok(new { data = danhSach });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new { message = "Không thể kết nối dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
 }
