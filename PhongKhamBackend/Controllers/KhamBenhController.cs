@@ -22,10 +22,10 @@ public class KhamBenhController : ControllerBase
         _logger  = logger;
     }
 
-    // ─── DTOs ───────────────────────────────────────────────────────────────
+    // DTOs
 
-    /// Request body cho PUT api/KhamBenh/{maPhieu}
-    /// Tất cả nhóm field đều TUỲ CHỌN — gửi nhóm nào thì cập nhật nhóm đó.
+    // Request body cho PUT api/KhamBenh/{maPhieu}
+    // Tất cả nhóm field đều TUỲ CHỌN — gửi nhóm nào thì cập nhật nhóm đó.
     public class CapNhatKhamBenhRequest
     {
         // Nhóm 1: Khám cơ bản — sinh hiệu
@@ -81,7 +81,7 @@ public class KhamBenhController : ControllerBase
         public int?   SoLuong { get; set; }
     }
 
-    // ─── Helper class ────────────────────────────────────────────────────────
+    // Helper class
 
     private class ThongTinDangNhap
     {
@@ -239,7 +239,7 @@ public class KhamBenhController : ControllerBase
             if (phieuKham == null)
                 return NotFound(new { message = "Không tìm thấy phiếu khám cần xem" });
 
-            // B3: BacSi chỉ xem phiếu do chính mình phụ trách
+            // BacSi chỉ xem phiếu do chính mình phụ trách
             if (!CoQuyenTruyCapPhieu(phieuKham, ttdn))
                 return StatusCode(403, new { message = "Bạn không có quyền xem phiếu khám này" });
 
@@ -375,8 +375,6 @@ public class KhamBenhController : ControllerBase
                         .AnyAsync(dv => dv.MaPhieu == maPhieu && dv.MaDv == maDv);
                     if (daChiDinh)
                     {
-                        // Fix: FE luôn gửi lại chiDinhCLSMoi kể cả ở các tab khác (kê thuốc, kết luận)
-                        // nên chỉ bỏ qua (idempotent) thay vì báo lỗi để tránh chặn nhầm
                         continue;
                     }
 
@@ -412,7 +410,7 @@ public class KhamBenhController : ControllerBase
             await _context.SaveChangesAsync();
 
             // Nhóm 4 — Đơn thuốc
-            // Fix: dùng Count > 0 thay vì != null để tránh array rỗng [] từ FE kích hoạt nhầm
+            // dùng Count > 0 thay vì != null để tránh array rỗng [] 
             if (request.DonThuoc?.Count > 0 || request.LoiDan != null)
             {
                 // Chặn kê đơn nếu còn CLS chưa thực hiện (TrangThaiDichVu = 0)
@@ -628,7 +626,7 @@ public class KhamBenhController : ControllerBase
                     string maVatTu      = item.MaVatTu.Trim();
                     int    soLuongCanKe = item.SoLuong!.Value;
 
-                    // (a) Validate maVatTu tồn tại và IsActive
+                    // Validate maVatTu tồn tại và IsActive
                     var vatTu = await _context.DanhMucVatTus
                         .FirstOrDefaultAsync(v => v.MaVatTu == maVatTu && v.IsActive);
                     if (vatTu == null)
@@ -637,14 +635,14 @@ public class KhamBenhController : ControllerBase
                         return BadRequest(new { message = "Vật tư không tồn tại hoặc đã ngừng sử dụng. Vui lòng kiểm tra lại" });
                     }
 
-                    // (b) Tính tổng tồn khả dụng (các lô chưa hết hạn)
+                    // Tính tổng tồn khả dụng (các lô chưa hết hạn)
                     int tonKhaDung = await _context.LoVatTus
                         .Where(lo => lo.MaVatTu == maVatTu
                                   && lo.HanSuDung >= homNay
                                   && lo.SoLuongTon > 0)
                         .SumAsync(lo => (int?)lo.SoLuongTon ?? 0);
 
-                    // (c) Chặn cứng nếu không đủ tồn
+                    // Chặn cứng nếu không đủ tồn
                     if (tonKhaDung < soLuongCanKe)
                     {
                         await transaction.RollbackAsync();
@@ -654,7 +652,7 @@ public class KhamBenhController : ControllerBase
                         });
                     }
 
-                    // (d) Trừ kho theo FEFO: sắp xếp HanSuDung ASC, trừ dần từng lô
+                    // Trừ kho theo FEFO: sắp xếp HanSuDung ASC, trừ dần từng lô
                     // Đồng thời ghi nhận GiaBan của lô đầu tiên bị trừ (dùng làm DonGia)
                     var loVatTuList = await _context.LoVatTus
                         .Where(lo => lo.MaVatTu == maVatTu
@@ -674,7 +672,7 @@ public class KhamBenhController : ControllerBase
                     }
                     // conLai phải = 0 tại đây (đã kiểm tra tonKhaDung ở trên)
 
-                    // (e) CỘNG DỒN vào ChiTietVatTuPhieuKham
+                    //  CỘNG DỒN vào ChiTietVatTuPhieuKham
                     var chiTietHienCo = await _context.ChiTietVatTuPhieuKhams
                         .FirstOrDefaultAsync(ct => ct.MaPhieu == maPhieu && ct.MaVatTu == maVatTu);
 
@@ -737,9 +735,6 @@ public class KhamBenhController : ControllerBase
             return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }
-
-
-    // ─── Private helpers ─────────────────────────────────────────────────────
 
     private async Task<ThongTinDangNhap?> LayThongTinDangNhapAsync()
     {
@@ -824,7 +819,7 @@ public class KhamBenhController : ControllerBase
                 canNang  = phieuKham.CanNang,
                 chieuCao = phieuKham.ChieuCao
             },
-//ICD
+            //ICD
             icdList = phieuKham.MaIcds
                 .OrderBy(icd => icd.MaIcd)
                 .Select(icd => new { maICD = icd.MaIcd, tenBenh = icd.TenBenh })
@@ -868,9 +863,9 @@ public class KhamBenhController : ControllerBase
                         .ToList()
                 },
 
-            // [MỚI] Danh sách vật tư đã kê (CỘNG DỒN)
+            // Danh sách vật tư đã kê
             // Chỉ có dữ liệu khi phiếu có chỉ định CLS; phiếu không có CLS → mảng rỗng
-            danhSachVatTu = phieuKham.ChiTietVatTuPhieuKhams
+            vatTu = phieuKham.ChiTietVatTuPhieuKhams
                 .OrderBy(ct => ct.MaVatTu)
                 .Select(ct => new
                 {

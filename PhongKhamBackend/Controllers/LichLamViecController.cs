@@ -18,26 +18,22 @@ public class LichLamViecController : ControllerBase
         _context = context;
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
     // DTO
-    // ──────────────────────────────────────────────────────────────────────────
     public class DangKyCaTrucRequest
     {
         public string NgayLamViec { get; set; } = string.Empty;  // yyyy-MM-dd
-        public string CaLamViec   { get; set; } = string.Empty;  // "Sang" | "Chieu" | "CaNgay"
+        public string CaLamViec   { get; set; } = string.Empty;  // "Sáng" | "Chiều" | "Cả ngày(sáng + chiều)"
         public string? PhongKham  { get; set; }
         public string? GhiChu     { get; set; }
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
     // POST api/LichLamViec — Bác sĩ tự đăng ký ca trực
     // Phân quyền: BacSi
-    // ──────────────────────────────────────────────────────────────────────────
     [HttpPost]
     [Authorize(Roles = "BacSi")]
     public async Task<IActionResult> DangKyCaTruc([FromBody] DangKyCaTrucRequest request)
     {
-        // ── 1. Lấy maNV từ userID trong token ──────────────────────────────
+        // Lấy maNV từ userID trong token
         string? userIdClaim = User.FindFirstValue("userID");
         if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
             return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
@@ -49,7 +45,7 @@ public class LichLamViecController : ControllerBase
         if (bacSi == null)
             return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
 
-        // ── 2. Validate ngayLamViec ────────────────────────────────────────
+        // Validate ngayLamViec 
         if (string.IsNullOrWhiteSpace(request.NgayLamViec))
             return BadRequest(new { message = "Vui lòng nhập ngày làm việc!" });
 
@@ -59,7 +55,7 @@ public class LichLamViecController : ControllerBase
         if (ngayLamViec < DateOnly.FromDateTime(DateTime.Now))
             return BadRequest(new { message = "Không thể đăng ký ca trực cho ngày trong quá khứ!" });
 
-        // ── 3. Validate caLamViec ──────────────────────────────────────────
+        // Validate caLamViec
         if (string.IsNullOrWhiteSpace(request.CaLamViec))
             return BadRequest(new { message = "Vui lòng chọn ca làm việc!" });
 
@@ -67,21 +63,21 @@ public class LichLamViecController : ControllerBase
         if (caLamViec != "Sang" && caLamViec != "Chieu" && caLamViec != "CaNgay")
             return BadRequest(new { message = "Ca làm việc không hợp lệ. Chỉ chấp nhận: Sang, Chieu, CaNgay" });
 
-        // ── 4. Kiểm tra MaKhoa của bác sĩ ─────────────────────────────────
+        // Kiểm tra MaKhoa của bác sĩ
         if (string.IsNullOrEmpty(bacSi.MaKhoa))
             return BadRequest(new { message = "Bác sĩ chưa được gán khoa. Vui lòng liên hệ Admin để được phân khoa trước khi đăng ký ca trực!" });
 
         string maNV    = bacSi.MaNv;
         string maKhoa  = bacSi.MaKhoa;
 
-        // ── 5. Tính khoảng tuần dương lịch (Thứ 2 → Chủ Nhật) ────────────
-        //      Dùng để check giới hạn 3 ca/tuần
-        int     dow        = (int)ngayLamViec.DayOfWeek;          // 0=CN, 1=T2, ...6=T7
-        int     offsetMon  = (dow == 0) ? -6 : (1 - dow);         // số ngày lùi về T2
+        // Tính tuần dương lịch (Thứ 2 → Chủ Nhật)
+        // Dùng để check giới hạn 3 ca/tuần
+        int     dow        = (int)ngayLamViec.DayOfWeek;         // 0=CN, 1=T2, ...6=T7
+        int     offsetMon  = (dow == 0) ? -6 : (1 - dow);        // số ngày lùi về T2
         DateOnly dauTuan   = ngayLamViec.AddDays(offsetMon);
         DateOnly cuoiTuan  = dauTuan.AddDays(6);
 
-        // ── 6. Transaction với Serializable để tránh race condition ────────
+        // Transaction với Serializable để tránh race condition
         var strategy = _context.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -190,10 +186,9 @@ public class LichLamViecController : ControllerBase
         });
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
+    
     // GET api/LichLamViec — Xem lịch trực (nội bộ)
     // Phân quyền: Mọi role đã đăng nhập
-    // ──────────────────────────────────────────────────────────────────────────
     [HttpGet]
     public async Task<IActionResult> XemLichTruc(
         [FromQuery] string? tuNgay  = null,
@@ -273,10 +268,8 @@ public class LichLamViecController : ControllerBase
         }
     }
 
-    // ──────────────────────────────────────────────────────────────────────────
     // DELETE api/LichLamViec/{maLich} — Admin xóa ca trực
     // Phân quyền: Admin
-    // ──────────────────────────────────────────────────────────────────────────
     [HttpDelete("{maLich}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> XoaCaTruc(int maLich)

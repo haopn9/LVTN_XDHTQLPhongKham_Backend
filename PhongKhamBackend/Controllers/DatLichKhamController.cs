@@ -18,16 +18,14 @@ public class DatLichKhamController : ControllerBase
         _context = context;
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // DTOs
-    // ══════════════════════════════════════════════════════════════════════════
 
+    // DTOs
     public class DatLichRequest
     {
         public string  HoTenKhach { get; set; } = string.Empty;
         public string  Sdt        { get; set; } = string.Empty;
         public string  NgayHen    { get; set; } = string.Empty;  // yyyy-MM-dd
-        public string  CaHen      { get; set; } = string.Empty;  // "Sang" | "Chieu"
+        public string  CaHen      { get; set; } = string.Empty;  // "Sáng" | "Chiều"
         public string? YeuCauKham { get; set; }
         public string? MaNV       { get; set; }                  // optional — khách không nhất thiết chọn bác sĩ
     }
@@ -47,13 +45,10 @@ public class DatLichKhamController : ControllerBase
         public string? TienSuBenh { get; set; }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // HELPER: Kiểm tra BN có phiếu khám đang active / chưa thanh toán
-    //   (dùng chung với TiepDonController để đảm bảo rule nhất quán)
-    // ══════════════════════════════════════════════════════════════════════════
+    // Kiểm tra BN có phiếu khám đang active / chưa thanh toán
     private async Task<(bool coLoi, string? message)> KiemTraPhieuKhamConDang(string maBN)
     {
-        // 1. Phiếu khám đang active (TrangThaiKham: 0=Chờ, 1=Đang khám, 2=Hoàn thành CLS)
+        // Phiếu khám đang active (TrangThaiKham: 0=Chờ, 1=Đang khám, 2=Hoàn thành CLS)
         var phieuActive = await _context.PhieuKhams
             .Where(pk => pk.MaBn == maBN
                       && (pk.TrangThaiKham == 0
@@ -65,7 +60,7 @@ public class DatLichKhamController : ControllerBase
         if (phieuActive != null)
             return (true, $"Bệnh nhân đang có phiếu khám chưa hoàn tất (Mã phiếu: {phieuActive}). Vui lòng xử lý xong phiếu cũ trước khi tiếp nhận mới!");
 
-        // 2. Phiếu đã hoàn tất nhưng chưa thanh toán (TrangThaiKham=3, không có HoaDon.TrangThaiThanhToan=true)
+        // Phiếu đã hoàn tất nhưng chưa thanh toán (TrangThaiKham=3, không có HoaDon.TrangThaiThanhToan=true)
         var phieuChuaTT = await _context.PhieuKhams
             .Where(pk => pk.MaBn == maBN
                       && pk.TrangThaiKham == 3
@@ -79,16 +74,14 @@ public class DatLichKhamController : ControllerBase
         return (false, null);
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // POST api/DatLichKham — Khách tạo lịch hẹn (public)
-    // ══════════════════════════════════════════════════════════════════════════
     [HttpPost]
     [AllowAnonymous]
     public async Task<IActionResult> DatLich([FromBody] DatLichRequest request)
     {
         try
         {
-            // ── Validate bắt buộc ──────────────────────────────────────────
+            // Validate bắt buộc 
             if (string.IsNullOrWhiteSpace(request.HoTenKhach))
                 return BadRequest(new { message = "Vui lòng nhập họ tên khách!" });
 
@@ -114,7 +107,7 @@ public class DatLichKhamController : ControllerBase
             if (caHen != "Sang" && caHen != "Chieu")
                 return BadRequest(new { message = "Ca hẹn không hợp lệ. Chỉ chấp nhận: Sang, Chieu" });
 
-            // ── Kiểm tra bác sĩ (nếu khách chọn cụ thể) ───────────────────
+            // Kiểm tra bác sĩ (nếu khách chọn cụ thể) 
             string? maNV = string.IsNullOrWhiteSpace(request.MaNV) ? null : request.MaNV.Trim();
 
             if (maNV != null)
@@ -142,7 +135,7 @@ public class DatLichKhamController : ControllerBase
                     });
             }
 
-            // ── Insert DatLichKham ─────────────────────────────────────────
+            // Insert DatLichKham
             var newLich = new DatLichKham
             {
                 HoTenKhach = request.HoTenKhach.Trim(),
@@ -171,10 +164,8 @@ public class DatLichKhamController : ControllerBase
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // GET api/DatLichKham — Danh sách lịch hẹn (LeTan, Admin)
     // Phân trang bắt buộc; tìm theo tên/SDT; ưu tiên ChoXacNhan lên đầu.
-    // ══════════════════════════════════════════════════════════════════════════
     [HttpGet]
     [Authorize(Roles = "LeTan,Admin")]
     public async Task<IActionResult> DanhSachLichHen(
@@ -262,9 +253,7 @@ public class DatLichKhamController : ControllerBase
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // PUT api/DatLichKham/{maDatLich}/xac-nhan — Lễ tân xác nhận lịch hẹn
-    // ══════════════════════════════════════════════════════════════════════════
     [HttpPut("{maDatLich}/xac-nhan")]
     [Authorize(Roles = "LeTan,Admin")]
     public async Task<IActionResult> XacNhanLich(int maDatLich)
@@ -308,9 +297,7 @@ public class DatLichKhamController : ControllerBase
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // PUT api/DatLichKham/{maDatLich}/huy — Hủy lịch hẹn
-    // ══════════════════════════════════════════════════════════════════════════
     [HttpPut("{maDatLich}/huy")]
     [Authorize(Roles = "LeTan,Admin")]
     public async Task<IActionResult> HuyLich(int maDatLich)
@@ -346,7 +333,6 @@ public class DatLichKhamController : ControllerBase
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
     // POST api/DatLichKham/{maDatLich}/tiep-nhan — Tiếp nhận bệnh nhân (Bước 5)
     //   Toàn bộ thao tác nằm trong 1 transaction:
     //     1. Xác định bác sĩ khám
@@ -354,7 +340,6 @@ public class DatLichKhamController : ControllerBase
     //     3. Kiểm tra phiếu active / nợ tiền
     //     4. Sinh PhieuKham
     //     5. Cập nhật DatLichKham.TrangThai = 'DaTiepNhan'
-    // ══════════════════════════════════════════════════════════════════════════
     [HttpPost("{maDatLich}/tiep-nhan")]
     [Authorize(Roles = "LeTan,Admin")]
     public async Task<IActionResult> TiepNhan(int maDatLich, [FromBody] TiepNhanRequest request)
@@ -472,7 +457,7 @@ public class DatLichKhamController : ControllerBase
                             }
                         }
 
-                        // Sinh maBN: "BN" + yyMMdd + stt 3 chữ số (giống TiepDonController)
+                        // Sinh maBN: "BN" + yyMMdd + stt 3 chữ số 
                         string today   = DateTime.Now.ToString("yyMMdd");
                         string prefix  = $"BN{today}";
 
@@ -506,7 +491,7 @@ public class DatLichKhamController : ControllerBase
                     }
                 }
 
-                // ── Kiểm tra phiếu active / chưa thanh toán ───────────────
+                // Kiểm tra phiếu active / chưa thanh toán 
                 var (coLoi, errMsg) = await KiemTraPhieuKhamConDang(maBN);
                 if (coLoi)
                 {
@@ -514,7 +499,7 @@ public class DatLichKhamController : ControllerBase
                     return Conflict(new { message = errMsg });
                 }
 
-                // ── Sinh mã phiếu khám (giống TiepDonController) ──────────
+                //  Sinh mã phiếu khám  
                 string todayPK  = DateTime.Now.ToString("yyMMdd");
                 string prefixPK = $"PK_{todayPK}_";
 
@@ -534,7 +519,7 @@ public class DatLichKhamController : ControllerBase
 
                 string maPhieu = $"{prefixPK}{sttPK:D3}";
 
-                // ── INSERT PhieuKham ───────────────────────────────────────
+                //  INSERT PhieuKham 
                 var newPhieu = new PhieuKham
                 {
                     MaPhieu       = maPhieu,
@@ -547,7 +532,7 @@ public class DatLichKhamController : ControllerBase
 
                 _context.PhieuKhams.Add(newPhieu);
 
-                // ── Cập nhật DatLichKham ───────────────────────────────────
+                //  Cập nhật DatLichKham 
                 lichHen.TrangThai = "DaTiepNhan";
                 lichHen.MaNv      = maBacSi;  // đồng bộ lại bác sĩ nếu lễ tân đổi
 

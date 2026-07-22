@@ -107,7 +107,7 @@ public class HoSoBenhAnController : ControllerBase
                 {
                     maBN = item.BenhNhan.MaBn,
                     hoTen = item.BenhNhan.HoTen,
-                    ngaySinh = item.BenhNhan.NgaySinh?.ToString("yyyy-MM-dd"),
+                    ngaySinh = item.BenhNhan.NgaySinh?.ToString("dd-MM-yyyy"),
                     gioiTinh = item.BenhNhan.GioiTinh,
                     sdt = item.BenhNhan.Sdt,
                     diaChi = item.BenhNhan.DiaChi,
@@ -189,7 +189,7 @@ public class HoSoBenhAnController : ControllerBase
         {
             maBN = benhNhan.MaBn,
             hoTen = benhNhan.HoTen,
-            ngaySinh = benhNhan.NgaySinh?.ToString("yyyy-MM-dd"),
+            ngaySinh = benhNhan.NgaySinh?.ToString("dd-MM-yyyy"),
             gioiTinh = benhNhan.GioiTinh,
             sdt = benhNhan.Sdt,
             diaChi = benhNhan.DiaChi,
