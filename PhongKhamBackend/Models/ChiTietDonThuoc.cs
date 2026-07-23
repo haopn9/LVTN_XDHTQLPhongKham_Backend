@@ -15,6 +15,8 @@ public partial class ChiTietDonThuoc
 
     public bool? TrangThaiPhatThuoc { get; set; }
 
+    public virtual ICollection<ChiTietDonThuocLo> ChiTietDonThuocLos { get; set; } = new List<ChiTietDonThuocLo>();
+
     public virtual DonThuoc MaDonThuocNavigation { get; set; } = null!;
 
     public virtual DanhMucThuoc MaThuocNavigation { get; set; } = null!;

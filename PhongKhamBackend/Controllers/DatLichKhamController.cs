@@ -45,6 +45,17 @@ public class DatLichKhamController : ControllerBase
         public string? TienSuBenh { get; set; }
     }
 
+    // Giờ bắt đầu của từng ca khám tại phòng khám: Sáng = 07:30, Chiều = 13:30
+    private static TimeOnly GioBatDauCa(string? caHen)
+    {
+        return caHen?.Trim() switch
+        {
+            "Sang"   => new TimeOnly(7, 30),
+            "Chieu"  => new TimeOnly(13, 30),
+            _        => TimeOnly.FromDateTime(DateTime.Now) // fallback an toàn, không nên xảy ra
+        };
+    }
+
     // Kiểm tra BN có phiếu khám đang active / chưa thanh toán
     private async Task<(bool coLoi, string? message)> KiemTraPhieuKhamConDang(string maBN)
     {
@@ -520,12 +531,18 @@ public class DatLichKhamController : ControllerBase
                 string maPhieu = $"{prefixPK}{sttPK:D3}";
 
                 //  INSERT PhieuKham 
+                // Lấy đúng ngày bệnh nhân đã đặt hẹn (lichHen.NgayHen) + giờ bắt đầu của ca hẹn
+                // (lichHen.CaHen), không dùng ngày/giờ lễ tân thao tác tiếp nhận.
+                DateTime ngayKham = lichHen.NgayHen.HasValue
+                    ? lichHen.NgayHen.Value.ToDateTime(GioBatDauCa(lichHen.CaHen))
+                    : DateTime.Now;
+
                 var newPhieu = new PhieuKham
                 {
                     MaPhieu       = maPhieu,
                     MaBn          = maBN,
                     MaNv          = maBacSi,
-                    NgayKham      = DateTime.Now,
+                    NgayKham      = ngayKham,
                     LyDoKham      = lichHen.YeuCauKham,
                     TrangThaiKham = 0  // Chờ khám
                 };

@@ -23,6 +23,8 @@ public partial class LoThuoc
 
     public DateOnly? HanSuDung { get; set; }
 
+    public virtual ICollection<ChiTietDonThuocLo> ChiTietDonThuocLos { get; set; } = new List<ChiTietDonThuocLo>();
+
     public virtual NhaCungCap? MaNccNavigation { get; set; }
 
     public virtual DanhMucThuoc? MaThuocNavigation { get; set; }

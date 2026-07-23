@@ -14,10 +14,10 @@ using System.Text;
 QuestPDF.Settings.License = LicenseType.Community;
 
 // Đăng ký font tiếng Việt để PDF hiển thị đúng dấu
-// Cách 1: FontDiscoveryPaths (QuestPDF 2024.3+) – tự động quét thư mục Fonts
+// FontDiscoveryPaths (QuestPDF 2024.3+) – tự động quét thư mục Fonts
 QuestPDF.Settings.FontDiscoveryPaths.Add(Path.Combine(AppContext.BaseDirectory, "Fonts"));
 
-// Cách 2: RegisterFont thủ công (fallback, đảm bảo tương thích tất cả phiên bản)
+// RegisterFont thủ công (fallback, đảm bảo tương thích tất cả phiên bản)
 using (var regularStream = File.OpenRead("Fonts/static/Roboto-Regular.ttf"))
     FontManager.RegisterFont(regularStream);
 

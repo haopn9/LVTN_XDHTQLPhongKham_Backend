@@ -49,7 +49,7 @@ public class KhamBenhController : ControllerBase
         public string?              LoiDan   { get; set; }
         public List<DonThuocItem>?  DonThuoc { get; set; }
 
-        // Nhóm 4b: Kê vật tư (CỘNG DỒN - chỉ áp dụng cho phiếu có CLS)
+        // Nhóm 4b: Kê vật tư (REPLACE toàn bộ danh sách — chỉ áp dụng cho phiếu có CLS)
         public List<VatTuItem>? VatTuList { get; set; }
 
         // Nhóm 5: Kết luận khám
@@ -403,14 +403,18 @@ public class KhamBenhController : ControllerBase
 
                     // Toggle 2 chiều tự do (không giới hạn số lần đổi)
                     dichVuYte.TrangThaiDichVu = clsItem.DaLamCLS ? 1 : 0;
+                    if (!clsItem.DaLamCLS)
+                    {
+                        // Toggle "Đã làm" → "Chưa làm": coi như hủy kết quả, làm lại từ đầu
+                        dichVuYte.KetQua = null;
+                    }
                 }
             }
 
             // Lưu các thay đổi B5-B7 trước khi xử lý đơn thuốc (B8)
             await _context.SaveChangesAsync();
 
-            // Nhóm 4 — Đơn thuốc
-            // dùng Count > 0 thay vì != null để tránh array rỗng [] 
+            // Nhóm 4 — Đơn thuốc (REPLACE semantics với hoàn/trừ kho chính xác theo lô)
             if (request.DonThuoc?.Count > 0 || request.LoiDan != null)
             {
                 // Chặn kê đơn nếu còn CLS chưa thực hiện (TrangThaiDichVu = 0)
@@ -425,6 +429,7 @@ public class KhamBenhController : ControllerBase
                 // Lấy hoặc tạo mới DonThuoc
                 var donThuoc = await _context.DonThuocs
                     .Include(dt => dt.ChiTietDonThuocs)
+                        .ThenInclude(ct => ct.ChiTietDonThuocLos)
                     .OrderBy(dt => dt.NgayKeDon)
                     .FirstOrDefaultAsync(dt => dt.MaPhieu == maPhieu);
 
@@ -469,7 +474,7 @@ public class KhamBenhController : ControllerBase
                 // Xử lý danh sách thuốc
                 if (request.DonThuoc != null && donThuoc != null)
                 {
-                    // Validate và kiểm tra trùng mã thuốc
+                    // ── BƯỚC 1: Validate đầu vào (giữ nguyên logic hiện có) ──
                     var maThuocList = new List<string>();
                     foreach (var item in request.DonThuoc)
                     {
@@ -497,7 +502,7 @@ public class KhamBenhController : ControllerBase
                         return Conflict(new { message = "Danh sách thuốc không được chứa mã thuốc trùng nhau" });
                     }
 
-                    // Kiểm tra thuốc đã phát — không được ghi đè
+                    // Chặn nếu request gửi lại mã thuốc đã phát
                     bool trungThuocDaPhat = donThuoc.ChiTietDonThuocs
                         .Any(ct => ct.TrangThaiPhatThuoc == true
                                 && maThuocList.Contains(ct.MaThuoc, StringComparer.OrdinalIgnoreCase));
@@ -507,15 +512,91 @@ public class KhamBenhController : ControllerBase
                         return Conflict(new { message = "Không thể ghi đè thuốc đã phát trong đơn thuốc" });
                     }
 
-                    // Kiểm tra tồn kho FEFO và trừ kho trong transaction
+                    // ── BƯỚC 2: Phân loại dòng chưa phát ──
+                    var dongChuaPhat = donThuoc.ChiTietDonThuocs
+                        .Where(ct => ct.TrangThaiPhatThuoc != true)
+                        .ToList();
+
+                    var requestDict = request.DonThuoc
+                        .ToDictionary(i => i.MaThuoc.Trim(), i => i, StringComparer.OrdinalIgnoreCase);
+
+                    // dongBiXoa: có trong DB (chưa phát) nhưng KHÔNG có trong request
+                    var dongBiXoa = dongChuaPhat
+                        .Where(ct => !requestDict.ContainsKey(ct.MaThuoc))
+                        .ToList();
+
+                    // dongGiuNguyen: có ở cả 2, SoLuong KHÔNG đổi
+                    var dongGiuNguyen = dongChuaPhat
+                        .Where(ct => requestDict.ContainsKey(ct.MaThuoc)
+                                  && ct.SoLuong == requestDict[ct.MaThuoc].SoLuong!.Value)
+                        .ToList();
+
+                    // dongCanSua: có ở cả 2, SoLuong CÓ đổi
+                    var dongCanSua = dongChuaPhat
+                        .Where(ct => requestDict.ContainsKey(ct.MaThuoc)
+                                  && ct.SoLuong != requestDict[ct.MaThuoc].SoLuong!.Value)
+                        .ToList();
+
+                    // dongMoi: có trong request nhưng KHÔNG có trong DB
+                    var maThuocHienCo = dongChuaPhat.Select(ct => ct.MaThuoc).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    // Thuốc đã phát cũng coi là "đã tồn tại" — không kê lại
+                    var maThuocDaPhat = donThuoc.ChiTietDonThuocs
+                        .Where(ct => ct.TrangThaiPhatThuoc == true)
+                        .Select(ct => ct.MaThuoc)
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var dongMoi = request.DonThuoc
+                        .Where(i => !maThuocHienCo.Contains(i.MaThuoc.Trim())
+                                 && !maThuocDaPhat.Contains(i.MaThuoc.Trim()))
+                        .ToList();
+
+                    // ── BƯỚC 3: Hoàn kho cho (dongBiXoa + dongCanSua) theo breakdown cũ ──
+                    var dongCanHoan = dongBiXoa.Concat(dongCanSua).ToList();
+                    foreach (var ct in dongCanHoan)
+                    {
+                        var breakdownList = await _context.ChiTietDonThuocLos
+                            .Where(b => b.MaDonThuoc == ct.MaDonThuoc && b.MaThuoc == ct.MaThuoc)
+                            .ToListAsync();
+
+                        if (breakdownList.Count == 0)
+                        {
+                            _logger.LogError(
+                                "[CapNhatDonThuoc] Không tìm thấy breakdown cho thuốc {MaThuoc} đơn {MaDon}. Dữ liệu cũ trước khi có bảng breakdown.",
+                                ct.MaThuoc, ct.MaDonThuoc);
+                            await transaction.RollbackAsync();
+                            return StatusCode(500, new { message = "Không thể xác định lô đã trừ cho dòng kê này. Vui lòng liên hệ quản trị viên để xử lý thủ công" });
+                        }
+
+                        // Hoàn SoLuongTru vào đúng lô tương ứng
+                        foreach (var bd in breakdownList)
+                        {
+                            var loThuoc = await _context.LoThuocs
+                                .FirstAsync(lo => lo.MaLo == bd.MaLo);
+                            loThuoc.SoLuongTon = (loThuoc.SoLuongTon ?? 0) + bd.SoLuongTru;
+                        }
+
+                        // Xóa breakdown rows
+                        _context.ChiTietDonThuocLos.RemoveRange(breakdownList);
+                    }
+
+                    // Xóa dòng ChiTietDonThuoc của (dongBiXoa + dongCanSua) khỏi DB
+                    _context.ChiTietDonThuocs.RemoveRange(dongCanHoan);
+
+                    // Flush để tồn kho đúng trước khi kiểm tra khả dụng
+                    await _context.SaveChangesAsync();
+
+                    // ── BƯỚC 4: Kiểm tra tồn kho cho (dongCanSua + dongMoi) ──
                     DateOnly homNay = DateOnly.FromDateTime(DateTime.Now);
 
-                    foreach (var item in request.DonThuoc)
+                    var dongCanTruMoi = dongCanSua
+                        .Select(ct => requestDict[ct.MaThuoc])
+                        .Concat(dongMoi)
+                        .ToList();
+
+                    foreach (var item in dongCanTruMoi)
                     {
-                        string maThuoc = item.MaThuoc.Trim();
+                        string maThuoc      = item.MaThuoc.Trim();
                         int    soLuongCanKe = item.SoLuong!.Value;
 
-                        // Validate maThuoc tồn tại và IsActive
                         var thuoc = await _context.DanhMucThuocs
                             .FirstOrDefaultAsync(t => t.MaThuoc == maThuoc && t.IsActive);
                         if (thuoc == null)
@@ -524,7 +605,6 @@ public class KhamBenhController : ControllerBase
                             return BadRequest(new { message = "Thuốc không tồn tại hoặc đã ngừng sử dụng. Vui lòng kiểm tra lại" });
                         }
 
-                        // Tính tổng tồn khả dụng (các lô chưa hết hạn)
                         int tonKhaDung = await _context.LoThuocs
                             .Where(lo => lo.MaThuoc == maThuoc
                                       && lo.HanSuDung >= homNay
@@ -539,13 +619,19 @@ public class KhamBenhController : ControllerBase
                                 message = $"Thuốc '{thuoc.TenThuoc}' không đủ tồn kho (còn {tonKhaDung}, yêu cầu {soLuongCanKe}). Vui lòng kiểm tra lại hoặc liên hệ kho thuốc!"
                             });
                         }
+                    }
 
-                        // Trừ kho theo FEFO: sắp theo HanSuDung ASC, trừ dần từng lô
+                    // ── BƯỚC 5: Trừ FEFO + ghi breakdown cho (dongCanSua + dongMoi) ──
+                    foreach (var item in dongCanTruMoi)
+                    {
+                        string maThuoc      = item.MaThuoc.Trim();
+                        int    soLuongCanKe = item.SoLuong!.Value;
+
                         var loThuocList = await _context.LoThuocs
                             .Where(lo => lo.MaThuoc == maThuoc
                                       && lo.HanSuDung >= homNay
                                       && lo.SoLuongTon > 0)
-                            .OrderBy(lo => lo.HanSuDung)   // lô gần hết hạn nhất trừ trước
+                            .OrderBy(lo => lo.HanSuDung)
                             .ToListAsync();
 
                         int conLai = soLuongCanKe;
@@ -556,36 +642,47 @@ public class KhamBenhController : ControllerBase
                             int truLo = Math.Min(conLai, lo.SoLuongTon ?? 0);
                             lo.SoLuongTon -= truLo;
                             conLai        -= truLo;
+
+                            // Ghi breakdown cho lô này
+                            _context.ChiTietDonThuocLos.Add(new ChiTietDonThuocLo
+                            {
+                                MaDonThuoc = donThuoc.MaDonThuoc,
+                                MaThuoc    = maThuoc,
+                                MaLo       = lo.MaLo,
+                                SoLuongTru = truLo
+                            });
                         }
-                        // conLai phải = 0 ở đây (đã kiểm tra tonKhaDung ở trên)
-                    }
 
-                    // Xoá các dòng thuốc chưa phát của đơn cũ
-                    var chiTietChuaPhat = donThuoc.ChiTietDonThuocs
-                        .Where(ct => ct.TrangThaiPhatThuoc != true)
-                        .ToList();
-                    _context.ChiTietDonThuocs.RemoveRange(chiTietChuaPhat);
-
-                    // INSERT danh sách thuốc mới
-                    foreach (var item in request.DonThuoc)
-                    {
+                        // INSERT dòng ChiTietDonThuoc mới
                         _context.ChiTietDonThuocs.Add(new ChiTietDonThuoc
                         {
                             MaDonThuoc         = donThuoc.MaDonThuoc,
-                            MaThuoc            = item.MaThuoc.Trim(),
-                            SoLuong            = item.SoLuong,
+                            MaThuoc            = maThuoc,
+                            SoLuong            = soLuongCanKe,
                             CachDung           = item.CachDung.Trim(),
                             TrangThaiPhatThuoc = false
                         });
+                    }
+
+                    // ── BƯỚC 6: dongGiuNguyen — không làm gì (fix bug double-deduct) ──
+                    // Cập nhật CachDung nếu thay đổi (SoLuong giữ nguyên, CachDung có thể sửa)
+                    foreach (var ct in dongGiuNguyen)
+                    {
+                        if (requestDict.TryGetValue(ct.MaThuoc, out var reqItem))
+                        {
+                            ct.CachDung = reqItem.CachDung.Trim();
+                        }
                     }
 
                     await _context.SaveChangesAsync();
                 }
             }
 
-            // Nhóm 4b — Kê vật tư (CỘNG DỒN theo FEFO)
-            // Chỉ kích hoạt khi vatTuList gửi lên có ít nhất 1 phần tử
-            if (request.VatTuList?.Count > 0)
+            // Nhóm 4b — Kê vật tư (REPLACE toàn bộ danh sách theo FEFO)
+            // VatTuList = null → không đụng vào vật tư
+            // VatTuList = [] (rỗng) → xóa toàn bộ vật tư đã kê (hoàn kho hết)
+            // VatTuList = [...] → REPLACE: phân loại + hoàn/trừ theo lô
+            if (request.VatTuList != null)
             {
                 // Chặn cứng nếu phiếu không có bất kỳ chỉ định CLS nào
                 bool coChiDinhCLS = await _context.DichVuYtes
@@ -596,7 +693,7 @@ public class KhamBenhController : ControllerBase
                     return Conflict(new { message = "Phiếu khám chưa có chỉ định CLS. Chỉ được kê vật tư cho phiếu có CLS!" });
                 }
 
-                // Validate danh sách: không được có maVatTu trùng trong cùng request
+                // Validate danh sách (bỏ qua nếu rỗng — xóa hết)
                 var maVatTuList = new List<string>();
                 foreach (var item in request.VatTuList)
                 {
@@ -619,14 +716,76 @@ public class KhamBenhController : ControllerBase
                     return Conflict(new { message = "Danh sách vật tư không được chứa mã vật tư trùng nhau trong cùng một request" });
                 }
 
-                DateOnly homNay = DateOnly.FromDateTime(DateTime.Now);
+                // Lấy toàn bộ vật tư hiện có của phiếu + breakdown
+                var vatTuHienCo = await _context.ChiTietVatTuPhieuKhams
+                    .Include(ct => ct.ChiTietVatTuLos)
+                    .Where(ct => ct.MaPhieu == maPhieu)
+                    .ToListAsync();
 
-                foreach (var item in request.VatTuList)
+                // ── Phân loại ──
+                var vtRequestDict = request.VatTuList
+                    .ToDictionary(i => i.MaVatTu.Trim(), i => i, StringComparer.OrdinalIgnoreCase);
+
+                var vtDongBiXoa = vatTuHienCo
+                    .Where(ct => !vtRequestDict.ContainsKey(ct.MaVatTu))
+                    .ToList();
+
+                var vtDongGiuNguyen = vatTuHienCo
+                    .Where(ct => vtRequestDict.ContainsKey(ct.MaVatTu)
+                              && ct.SoLuong == vtRequestDict[ct.MaVatTu].SoLuong!.Value)
+                    .ToList();
+
+                var vtDongCanSua = vatTuHienCo
+                    .Where(ct => vtRequestDict.ContainsKey(ct.MaVatTu)
+                              && ct.SoLuong != vtRequestDict[ct.MaVatTu].SoLuong!.Value)
+                    .ToList();
+
+                var maVatTuHienCo = vatTuHienCo.Select(ct => ct.MaVatTu).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var vtDongMoi = request.VatTuList
+                    .Where(i => !maVatTuHienCo.Contains(i.MaVatTu.Trim()))
+                    .ToList();
+
+                // ── Hoàn kho cho (dongBiXoa + dongCanSua) theo breakdown cũ ──
+                var vtDongCanHoan = vtDongBiXoa.Concat(vtDongCanSua).ToList();
+                foreach (var ct in vtDongCanHoan)
+                {
+                    var breakdownList = ct.ChiTietVatTuLos.ToList();
+
+                    if (breakdownList.Count == 0)
+                    {
+                        _logger.LogError(
+                            "[CapNhatVatTu] Không tìm thấy breakdown cho vật tư {MaVatTu} phiếu {MaPhieu}. Dữ liệu cũ trước khi có bảng breakdown.",
+                            ct.MaVatTu, ct.MaPhieu);
+                        await transaction.RollbackAsync();
+                        return StatusCode(500, new { message = "Không thể xác định lô đã trừ cho dòng kê này. Vui lòng liên hệ quản trị viên để xử lý thủ công" });
+                    }
+
+                    foreach (var bd in breakdownList)
+                    {
+                        var loVatTu = await _context.LoVatTus
+                            .FirstAsync(lo => lo.MaLo == bd.MaLo);
+                        loVatTu.SoLuongTon += bd.SoLuongTru;
+                    }
+
+                    _context.ChiTietVatTuLos.RemoveRange(breakdownList);
+                }
+
+                _context.ChiTietVatTuPhieuKhams.RemoveRange(vtDongCanHoan);
+                await _context.SaveChangesAsync();
+
+                // ── Kiểm tra tồn kho + trừ FEFO + ghi breakdown cho (dongCanSua + dongMoi) ──
+                DateOnly homNayVT = DateOnly.FromDateTime(DateTime.Now);
+
+                var vtDongCanTruMoi = vtDongCanSua
+                    .Select(ct => vtRequestDict[ct.MaVatTu])
+                    .Concat(vtDongMoi)
+                    .ToList();
+
+                foreach (var item in vtDongCanTruMoi)
                 {
                     string maVatTu      = item.MaVatTu.Trim();
                     int    soLuongCanKe = item.SoLuong!.Value;
 
-                    // Validate maVatTu tồn tại và IsActive
                     var vatTu = await _context.DanhMucVatTus
                         .FirstOrDefaultAsync(v => v.MaVatTu == maVatTu && v.IsActive);
                     if (vatTu == null)
@@ -635,14 +794,12 @@ public class KhamBenhController : ControllerBase
                         return BadRequest(new { message = "Vật tư không tồn tại hoặc đã ngừng sử dụng. Vui lòng kiểm tra lại" });
                     }
 
-                    // Tính tổng tồn khả dụng (các lô chưa hết hạn)
                     int tonKhaDung = await _context.LoVatTus
                         .Where(lo => lo.MaVatTu == maVatTu
-                                  && lo.HanSuDung >= homNay
+                                  && lo.HanSuDung >= homNayVT
                                   && lo.SoLuongTon > 0)
                         .SumAsync(lo => (int?)lo.SoLuongTon ?? 0);
 
-                    // Chặn cứng nếu không đủ tồn
                     if (tonKhaDung < soLuongCanKe)
                     {
                         await transaction.RollbackAsync();
@@ -652,16 +809,14 @@ public class KhamBenhController : ControllerBase
                         });
                     }
 
-                    // Trừ kho theo FEFO: sắp xếp HanSuDung ASC, trừ dần từng lô
-                    // Đồng thời ghi nhận GiaBan của lô đầu tiên bị trừ (dùng làm DonGia)
                     var loVatTuList = await _context.LoVatTus
                         .Where(lo => lo.MaVatTu == maVatTu
-                                  && lo.HanSuDung >= homNay
+                                  && lo.HanSuDung >= homNayVT
                                   && lo.SoLuongTon > 0)
-                        .OrderBy(lo => lo.HanSuDung)   // lô hết hạn gần nhất trừ trước (FEFO)
+                        .OrderBy(lo => lo.HanSuDung)
                         .ToListAsync();
 
-                    decimal giaBanLoDauTien = loVatTuList.First().GiaBan;  // GiaBan lô đầu tiên
+                    decimal giaBanLoDauTien = loVatTuList.First().GiaBan;
                     int     conLai          = soLuongCanKe;
                     foreach (var lo in loVatTuList)
                     {
@@ -669,30 +824,28 @@ public class KhamBenhController : ControllerBase
                         int truLo  = Math.Min(conLai, lo.SoLuongTon);
                         lo.SoLuongTon -= truLo;
                         conLai        -= truLo;
-                    }
-                    // conLai phải = 0 tại đây (đã kiểm tra tonKhaDung ở trên)
 
-                    //  CỘNG DỒN vào ChiTietVatTuPhieuKham
-                    var chiTietHienCo = await _context.ChiTietVatTuPhieuKhams
-                        .FirstOrDefaultAsync(ct => ct.MaPhieu == maPhieu && ct.MaVatTu == maVatTu);
-
-                    if (chiTietHienCo != null)
-                    {
-                        // Đã có dòng → cộng thêm SoLuong; DonGia GIỮ NGUYÊN theo lần kê đầu
-                        chiTietHienCo.SoLuong += soLuongCanKe;
-                    }
-                    else
-                    {
-                        // Chưa có → INSERT mới với DonGia = GiaBan lô đầu tiên bị trừ
-                        _context.ChiTietVatTuPhieuKhams.Add(new ChiTietVatTuPhieuKham
+                        // Ghi breakdown cho lô này
+                        _context.ChiTietVatTuLos.Add(new ChiTietVatTuLo
                         {
-                            MaPhieu  = maPhieu,
-                            MaVatTu  = maVatTu,
-                            SoLuong  = soLuongCanKe,
-                            DonGia   = giaBanLoDauTien
+                            MaPhieu    = maPhieu,
+                            MaVatTu    = maVatTu,
+                            MaLo       = lo.MaLo,
+                            SoLuongTru = truLo
                         });
                     }
+
+                    // INSERT dòng ChiTietVatTuPhieuKham mới
+                    _context.ChiTietVatTuPhieuKhams.Add(new ChiTietVatTuPhieuKham
+                    {
+                        MaPhieu = maPhieu,
+                        MaVatTu = maVatTu,
+                        SoLuong = soLuongCanKe,
+                        DonGia  = giaBanLoDauTien
+                    });
                 }
+
+                // dongGiuNguyen: không làm gì — giữ nguyên dòng cũ + breakdown cũ
 
                 await _context.SaveChangesAsync();
             }
@@ -732,6 +885,71 @@ public class KhamBenhController : ControllerBase
         {
             _logger.LogError(ex,
                 "[CapNhatThongTinKhamBenh] Lỗi khi cập nhật phiếu khám {MaPhieu}", maPhieu);
+            return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
+        }
+    }
+
+
+    // ───────────────────────────────────────────────────────────────────────
+    // DELETE api/KhamBenh/{maPhieu}/chi-dinh-cls/{maChiTiet}
+    //   — Xóa một chỉ định CLS chưa thực hiện khỏi phiếu khám
+    // Phân quyền: BacSi, Admin
+    //   - BacSi: chỉ xóa trên phiếu của mình
+    //   - Phiếu Hoàn thành(3): chỉ Admin được xóa
+    //   - Điều kiện: TrangThaiDichVu == 0 VÀ KetQua null/rỗng
+    // ───────────────────────────────────────────────────────────────────────
+    [HttpDelete("{maPhieu}/chi-dinh-cls/{maChiTiet}")]
+    [Authorize(Roles = "BacSi,Admin")]
+    public async Task<IActionResult> XoaChiDinhCLS(string maPhieu, int maChiTiet)
+    {
+        try
+        {
+            // 1. Xác thực đăng nhập
+            var ttdn = await LayThongTinDangNhapAsync();
+            if (ttdn == null)
+                return Unauthorized(new { message = "Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại" });
+
+            // 2. Kiểm tra phiếu khám tồn tại
+            var phieuKham = await _context.PhieuKhams
+                .FirstOrDefaultAsync(pk => pk.MaPhieu == maPhieu);
+            if (phieuKham == null)
+                return NotFound(new { message = "Không tìm thấy phiếu khám cần cập nhật" });
+
+            // 3. Kiểm tra quyền truy cập phiếu
+            if (!CoQuyenTruyCapPhieu(phieuKham, ttdn))
+                return StatusCode(403, new { message = "Bạn không có quyền cập nhật phiếu khám này" });
+
+            // 4. Phiếu Hoàn thành(3) — chỉ Admin được sửa
+            if (phieuKham.TrangThaiKham == 3 && !ttdn.IsAdmin)
+                return StatusCode(403, new { message = "Phiếu khám đã hoàn thành, không thể chỉnh sửa" });
+
+            // 5. Tìm bản ghi DichVuYte theo (MaChiTiet, MaPhieu)
+            var dichVuYte = await _context.DichVuYtes
+                .FirstOrDefaultAsync(dv => dv.MaChiTiet == maChiTiet && dv.MaPhieu == maPhieu);
+            if (dichVuYte == null)
+                return NotFound(new { message = "Chỉ định CLS không hợp lệ hoặc không thuộc phiếu khám này" });
+
+            // 6. Kiểm tra điều kiện xóa: TrangThaiDichVu == 0 VÀ KetQua null/rỗng
+            if (dichVuYte.TrangThaiDichVu != 0 || !string.IsNullOrWhiteSpace(dichVuYte.KetQua))
+                return Conflict(new { message = "Không thể xóa chỉ định CLS đã thực hiện hoặc đã có kết quả" });
+
+            // 7. Xóa bản ghi DichVuYte
+            _context.DichVuYtes.Remove(dichVuYte);
+
+            // 8. SaveChangesAsync
+            await _context.SaveChangesAsync();
+
+            // 9. Trả về 200 kèm phiếu khám sau cập nhật
+            var phieuSauCapNhat = await LayPhieuKhamDayDuAsync(maPhieu);
+            return Ok(new
+            {
+                message = "Xóa chỉ định CLS thành công",
+                data    = TaoResponsePhieuKham(phieuSauCapNhat!)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[XoaChiDinhCLS] Lỗi khi xóa chỉ định CLS {MaChiTiet} phiếu {MaPhieu}", maChiTiet, maPhieu);
             return StatusCode(500, new { message = "Không thể cập nhật dữ liệu từ máy chủ. Xin hãy thử lại" });
         }
     }

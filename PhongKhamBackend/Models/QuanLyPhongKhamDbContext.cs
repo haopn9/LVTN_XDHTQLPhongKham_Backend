@@ -21,6 +21,10 @@ public partial class QuanLyPhongKhamDbContext : DbContext
 
     public virtual DbSet<ChiTietDonThuoc> ChiTietDonThuocs { get; set; }
 
+    public virtual DbSet<ChiTietDonThuocLo> ChiTietDonThuocLos { get; set; }
+
+    public virtual DbSet<ChiTietVatTuLo> ChiTietVatTuLos { get; set; }
+
     public virtual DbSet<ChiTietVatTuPhieuKham> ChiTietVatTuPhieuKhams { get; set; }
 
     public virtual DbSet<DanhMucIcd> DanhMucIcds { get; set; }
@@ -44,8 +48,6 @@ public partial class QuanLyPhongKhamDbContext : DbContext
     public virtual DbSet<LoThuoc> LoThuocs { get; set; }
 
     public virtual DbSet<LoVatTu> LoVatTus { get; set; }
-
-    public virtual DbSet<LoaiDichVu> LoaiDichVus { get; set; }
 
     public virtual DbSet<NhaCungCap> NhaCungCaps { get; set; }
 
@@ -93,15 +95,10 @@ public partial class QuanLyPhongKhamDbContext : DbContext
                 .IsUnicode(false)
                 .HasColumnName("MaDV");
             entity.Property(e => e.GiaTien).HasColumnType("decimal(18, 2)");
-            entity.Property(e => e.MaLoaiDv).HasColumnName("MaLoaiDV");
             entity.Property(e => e.TenDv)
                 .HasMaxLength(255)
                 .HasColumnName("TenDV");
             entity.Property(e => e.TrangThai).HasDefaultValue(true);
-
-            entity.HasOne(d => d.MaLoaiDvNavigation).WithMany(p => p.ChiTietDichVuYtes)
-                .HasForeignKey(d => d.MaLoaiDv)
-                .HasConstraintName("FK__ChiTietDi__MaLoa__3A4CA8FD");
         });
 
         modelBuilder.Entity<ChiTietDonThuoc>(entity =>
@@ -128,6 +125,60 @@ public partial class QuanLyPhongKhamDbContext : DbContext
                 .HasForeignKey(d => d.MaThuoc)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__ChiTietDo__MaThu__02084FDA");
+        });
+
+        modelBuilder.Entity<ChiTietDonThuocLo>(entity =>
+        {
+            entity.HasKey(e => new { e.MaDonThuoc, e.MaThuoc, e.MaLo });
+
+            entity.ToTable("ChiTietDonThuoc_Lo");
+
+            entity.Property(e => e.MaDonThuoc)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.MaThuoc)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.MaLo)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+
+            entity.HasOne(d => d.MaLoNavigation).WithMany(p => p.ChiTietDonThuocLos)
+                .HasForeignKey(d => d.MaLo)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_CTDTLo_LoThuoc");
+
+            entity.HasOne(d => d.ChiTietDonThuoc).WithMany(p => p.ChiTietDonThuocLos)
+                .HasForeignKey(d => new { d.MaDonThuoc, d.MaThuoc })
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_CTDTLo_ChiTietDonThuoc");
+        });
+
+        modelBuilder.Entity<ChiTietVatTuLo>(entity =>
+        {
+            entity.HasKey(e => new { e.MaPhieu, e.MaVatTu, e.MaLo });
+
+            entity.ToTable("ChiTietVatTu_Lo");
+
+            entity.Property(e => e.MaPhieu)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.MaVatTu)
+                .HasMaxLength(20)
+                .IsUnicode(false);
+            entity.Property(e => e.MaLo)
+                .HasMaxLength(50)
+                .IsUnicode(false);
+
+            entity.HasOne(d => d.MaLoNavigation).WithMany(p => p.ChiTietVatTuLos)
+                .HasForeignKey(d => d.MaLo)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_CTVTLo_LoVatTu");
+
+            entity.HasOne(d => d.ChiTietVatTuPhieuKham).WithMany(p => p.ChiTietVatTuLos)
+                .HasForeignKey(d => new { d.MaPhieu, d.MaVatTu })
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_CTVTLo_ChiTietVatTu");
         });
 
         modelBuilder.Entity<ChiTietVatTuPhieuKham>(entity =>
@@ -401,16 +452,6 @@ public partial class QuanLyPhongKhamDbContext : DbContext
                 .HasForeignKey(d => d.MaVatTu)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_LoVatTu_DanhMucVatTu");
-        });
-
-        modelBuilder.Entity<LoaiDichVu>(entity =>
-        {
-            entity.HasKey(e => e.MaLoaiDv).HasName("PK__LoaiDich__12274865EE53E8BC");
-
-            entity.ToTable("LoaiDichVu");
-
-            entity.Property(e => e.MaLoaiDv).HasColumnName("MaLoaiDV");
-            entity.Property(e => e.TenLoai).HasMaxLength(100);
         });
 
         modelBuilder.Entity<NhaCungCap>(entity =>

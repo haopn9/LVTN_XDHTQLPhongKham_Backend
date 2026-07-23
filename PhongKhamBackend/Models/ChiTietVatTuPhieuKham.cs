@@ -13,6 +13,8 @@ public partial class ChiTietVatTuPhieuKham
 
     public decimal DonGia { get; set; }
 
+    public virtual ICollection<ChiTietVatTuLo> ChiTietVatTuLos { get; set; } = new List<ChiTietVatTuLo>();
+
     public virtual PhieuKham MaPhieuNavigation { get; set; } = null!;
 
     public virtual DanhMucVatTu MaVatTuNavigation { get; set; } = null!;

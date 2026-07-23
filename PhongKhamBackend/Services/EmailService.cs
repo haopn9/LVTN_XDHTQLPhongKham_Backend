@@ -6,7 +6,6 @@ namespace PhongKhamBackend.Services;
 
 // Interface — cho phép mock/test và dùng chung cho nhiều loại email (OTP, thông báo, v.v.)
 // Tham số "smtpProfile" cho phép chọn cấu hình SMTP nào sẽ dùng để gửi
-// (ứng với các section "Smtp1", "Smtp2", ... trong appsettings.json)
 public interface IEmailService
 {
     Task SendOtpEmailAsync(string toEmail, string hoTen, string otpCode, int expiryMinutes, string smtpProfile = "Smtp1");
@@ -47,8 +46,8 @@ public class EmailService : IEmailService
         return settings;
     }
 
-    // Gửi email chứa mã OTP dùng cho chức năng Quên mật khẩu
-    // smtpProfile: chọn tài khoản Gmail nào sẽ gửi — vd "Smtp1" (của bạn A) hoặc "Smtp2" (của bạn B)
+    // Gửi email chứa mã OTP dùng cho chức năng Quên mật khẩu 
+    // smtpProfile: chọn tài khoản Gmail đã được setting trong appsettings để gửi.
     public async Task SendOtpEmailAsync(string toEmail, string hoTen, string otpCode, int expiryMinutes, string smtpProfile = "Smtp1")
     {
         var smtpSettings = LayCauHinhSmtp(smtpProfile);
@@ -108,58 +107,3 @@ public class EmailService : IEmailService
         }
     }
 }
-
-/*
-=====================================================================
-HƯỚNG DẪN CÀI ĐẶT (2 CẤU HÌNH SMTP SONG SONG)
-=====================================================================
-
-1) Cài NuGet package:
-   Install-Package MailKit
-
-2) Thêm 2 section riêng biệt vào appsettings.json (hoặc appsettings.Development.json
-   để không commit App Password thật lên Git):
-
-   {
-     "Smtp1": {
-       "Host": "smtp.gmail.com",
-       "Port": 587,
-       "Username": "ban1@gmail.com",
-       "Password": "app-password-cua-ban1",
-       "FromName": "QLPhongKham"
-     },
-     "Smtp2": {
-       "Host": "smtp.gmail.com",
-       "Port": 587,
-       "Username": "ban2@gmail.com",
-       "Password": "app-password-cua-ban2",
-       "FromName": "QLPhongKham"
-     }
-   }
-
-   Mỗi bạn trong nhóm tạo App Password riêng theo Gmail của mình
-   (xem lại hướng dẫn tạo App Password ở phần trước).
-
-3) Đăng ký service trong Program.cs (KHÔNG đổi gì so với trước —
-   EmailService giờ tự đọc cấu hình theo profile khi được gọi,
-   không cố định 1 cấu hình lúc khởi tạo):
-
-   builder.Services.AddScoped<IEmailService, EmailService>();
-
-4) Cách dùng trong XacThucController — chọn profile khi gọi hàm gửi:
-
-   // Ví dụ: mặc định dùng Smtp1, nhưng cho phép chỉ định Smtp2 khi cần test
-   await _emailService.SendOtpEmailAsync(
-       toEmail: user.NhanVien!.Email,
-       hoTen: user.NhanVien.HoTen,
-       otpCode: otpCode,
-       expiryMinutes: 5,
-       smtpProfile: "Smtp2"); // hoặc "Smtp1", hoặc đọc từ appsettings/biến môi trường
-
-   Gợi ý: có thể thêm 1 key cấu hình "ActiveSmtpProfile": "Smtp1" trong
-   appsettings.json để chọn profile mặc định toàn hệ thống, thay vì
-   hard-code "Smtp1"/"Smtp2" trong code — mỗi bạn chỉ cần đổi giá trị
-   này trên máy mình khi test mà không cần sửa Controller.
-
-=====================================================================
-*/
