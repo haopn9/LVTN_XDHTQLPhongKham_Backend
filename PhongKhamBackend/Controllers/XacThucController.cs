@@ -70,7 +70,7 @@ public class XacThucController : ControllerBase
         {
             return BadRequest(new
             {
-                message = "Người dùng bắt buộc nhập đủ email & mật khẩu để đăng nhập tài khoản"
+                message = "Người dùng bắt buộc nhập đúng định dạng của email.Ví dụ: user@gmail.com . "
             });
         }
 

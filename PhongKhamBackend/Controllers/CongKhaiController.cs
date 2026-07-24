@@ -242,4 +242,82 @@ public class CongKhaiController : ControllerBase
             });
         }
     }
+
+    // ================================================================
+    // 3. TRA CỨU LỊCH HẸN KHÁM ĐÃ ĐẶT
+    // GET api/CongKhai/tra-cuu-lich-hen?hoTen={hoTen}&sdt={sdt}
+    // ================================================================
+    /// <summary>
+    /// Khách vãng lai tự tra cứu (các) lịch hẹn đã đặt qua form đặt lịch
+    /// online, bằng cách cung cấp ĐỒNG THỜI Họ tên và Số điện thoại đã
+    /// đăng ký lúc đặt lịch. Họ tên so khớp CÓ DẤU, chính xác (Trim).
+    /// Chỉ trả: ngày hẹn, ca hẹn, trạng thái, tên bác sĩ/khoa (nếu có).
+    /// Không trả: MaNV, MaKhoa (mã nội bộ).
+    /// </summary>
+    [HttpGet("tra-cuu-lich-hen")]
+    public async Task<IActionResult> TraCuuLichHen(
+        [FromQuery] string? hoTen,
+        [FromQuery] string? sdt)
+    {
+        try
+        {
+            // B1: Validate — không được thiếu bất kỳ trường nào
+            if (string.IsNullOrWhiteSpace(hoTen) || string.IsNullOrWhiteSpace(sdt))
+                return BadRequest(new
+                {
+                    message = "Vui lòng nhập đầy đủ Họ tên và Số điện thoại"
+                });
+
+            // B2: Validate định dạng SĐT (10 chữ số, bắt đầu bằng 0)
+            if (!Regex.IsMatch(sdt.Trim(), @"^0\d{9}$"))
+                return BadRequest(new
+                {
+                    message = "Số điện thoại không đúng định dạng"
+                });
+
+            // B3: Tìm lịch hẹn — phải khớp CẢ HoTenKhach (có dấu, chính xác) VÀ SDT
+            //     Sắp xếp mới nhất lên đầu; giới hạn 20 kết quả tránh trả về
+            //     danh sách quá dài cho khách vãng lai
+            var danhSach = await _context.DatLichKhams
+                .AsNoTracking()
+                .Include(d => d.MaNvNavigation)
+                    .ThenInclude(nv => nv!.MaKhoaNavigation)
+                .Where(d => d.Sdt == sdt.Trim() && d.HoTenKhach == hoTen.Trim())
+                .OrderByDescending(d => d.NgayHen)
+                .ThenByDescending(d => d.MaDatLich)
+                .Take(20)
+                .Select(d => new
+                {
+                    maDatLich  = d.MaDatLich,
+                    hoTenKhach = d.HoTenKhach,
+                    sdt        = d.Sdt,
+                    ngayHen    = d.NgayHen.HasValue ? d.NgayHen.Value.ToString("yyyy-MM-dd") : null,
+                    caHen      = d.CaHen,
+                    yeuCauKham = d.YeuCauKham,
+                    trangThai  = d.TrangThai,
+                    tenBacSi   = d.MaNvNavigation != null ? d.MaNvNavigation.HoTen : null,
+                    tenKhoa    = d.MaNvNavigation != null && d.MaNvNavigation.MaKhoaNavigation != null
+                                     ? d.MaNvNavigation.MaKhoaNavigation.TenKhoa
+                                     : null
+                })
+                .ToListAsync();
+
+            // B4a: Không khớp → 404 với thông báo chung (không lộ lý do)
+            if (danhSach.Count == 0)
+                return NotFound(new
+                {
+                    message = "Không tìm thấy lịch hẹn khớp với thông tin đã nhập"
+                });
+
+            // B4b: Trả HTTP 200
+            return Ok(new { data = danhSach });
+        }
+        catch (Exception)
+        {
+            return StatusCode(500, new
+            {
+                message = "Không thể tra cứu dữ liệu. Vui lòng thử lại sau"
+            });
+        }
+    }
 }
